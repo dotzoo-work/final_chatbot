@@ -553,7 +553,7 @@ Please provide an improved response that:
    🚨 for emergencies
    💡 for tips/advice
    📅 for appointments
-   � for X-rays/diagnostics
+    for X-rays/diagnostics
 7. Ends with a thoughtful follow-up question
 8. Is well-spaced and easy to read
 
