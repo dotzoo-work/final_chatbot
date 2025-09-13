@@ -20,6 +20,7 @@ from mongodb_manager import get_mongodb_manager
 from api_endpoints import router as api_router
 from s3_endpoints import router as s3_router
 from s3_data_manager import get_s3_data_manager
+from simple_transcript_api import router as transcript_router
 
 # Load environment variables
 load_dotenv()
@@ -46,6 +47,7 @@ app.add_middleware(
 # Include additional API routes
 app.include_router(api_router)
 app.include_router(s3_router)
+app.include_router(transcript_router)
 
 # Global variables
 orchestrator: Optional[MultiAgentOrchestrator] = None
