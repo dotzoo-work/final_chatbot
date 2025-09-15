@@ -19,9 +19,11 @@ load_dotenv()
 router = APIRouter()
 
 # SendGrid Configuration
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "niranjan@dotzoo.net")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "dotzookr@gmail.com")
+# SendGrid Configuration
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "").strip()
+FROM_EMAIL = os.getenv("FROM_EMAIL", "niranjan@dotzoo.net").strip()
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "dotzookr@gmail.com").strip()
+
 SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send"
 
 class ChatMessage(BaseModel):
