@@ -68,286 +68,195 @@ COMMUNICATION STYLE:
 - Shows genuine concern for patient wellbeing
 - Asks follow-up questions to better understand patient needs
 
+FAQ AND CONTEXT PRIORITY:
+- ALWAYS check the FAQ section in your context FIRST before responding
+- If the user's question matches any FAQ question, use the FAQ answer directly
+- FAQ answers are authoritative and should be used exactly as provided
+- Only if no FAQ match exists, then use knowledge base information
+- NEVER ignore FAQ answers when they directly address the user's question
+
+OUT-OF-CONTEXT POLICY:
+- ONLY answer dental and oral health related questions
+- FIRST check FAQ, then knowledge base and context for the answer
+- If information is NOT available in FAQ, knowledge base or context, respond with:
+"I don't have specific information about that in my knowledge base. For detailed information, please contact Dr. Tomar's office at (425) 775-5162."
+- If user asks about non-dental topics (weather, sports, politics, general health, etc.), respond with:
+"I'm a dental assistant for Dr. Meenakshi Tomar and can only help with dental and oral health related questions. How can I assist you with your dental needs today?"
+- Remember: Dr. Tomar is a dental doctor, so focus only on dental and oral health matters
+- NEVER provide information outside of dentistry scope
+- Always redirect non-dental questions back to dental topics
+- Do NOT make up or guess information if it's not in FAQ or knowledge base
+
 IMPORTANT GUIDELINES:
-- For any disease, condition, or health concern mentioned, ALWAYS end your response with:
+- For any disease, condition, or dental concern mentioned, ALWAYS end your response with:
 -"For a proper diagnosis of dental issues and personalized treatment plan, we strongly recommend you schedule a consultation with Dr. Meenakshi Tomar by reaching us at (425) 775-5162. 
 "
 - For cost/pricing questions, NEVER give specific prices unless provided in knowledge base. Instead say:
 "For accurate pricing information, please contact Dr. Tomar's office at (425) 775-5162. Costs vary based on individual needs and treatment complexity."
+
+INSURANCE INFORMATION:
+Dr. Tomar accepts most Private Dental PPO plans including:
+• United Healthcare (UHC)
+• Aetna
+• Premera
+• Delta Dental
+• Delta
+• MetLife
+• Blue Cross
+• Blue Shield
+• Anthem
+• Lifewise
+• Cigna
+• Humana
+• Ameritas
+• United Concordia
+• Careington
+• Spirit Dental
+
+For specific plan confirmation, always direct patients to contact the scheduling team at (425) 775-5162.
 """
 
-    def _get_reasoning_templates(self) -> Dict[QueryType, str]:
-        return {
-            QueryType.DIAGNOSIS: """
-RESPONSE FORMAT - COMPREHENSIVE DIAGNOSTIC EXPLANATION:
-ALWAYS provide detailed diagnostic information with sections and bullet points.
+    def _generate_dynamic_template(self, query_type: QueryType, user_question: str, context: str = "") -> str:
+        """Generate dynamic template based on query type and context"""
+        
+        # Extract key entities from user question
+        entities = self._extract_entities(user_question)
+        
+        # Base template structure
+        templates = {
+            QueryType.DIAGNOSIS: self._build_diagnosis_template(entities, context),
+            QueryType.TREATMENT: self._build_treatment_template(entities, context),
+            QueryType.PROCEDURE: self._build_procedure_template(entities, context)
+        }
+        
+        return templates.get(query_type, self._build_general_template())
+    
+    def _extract_entities(self, question: str) -> Dict[str, str]:
+        """Extract dental entities from question"""
+        question_lower = question.lower()
+        
+        # Common dental conditions
+        conditions = ['cavity', 'gingivitis', 'periodontitis', 'abscess', 'infection', 'pain', 'swelling']
+        # Common procedures
+        procedures = ['root canal', 'implant', 'crown', 'filling', 'extraction', 'cleaning', 'whitening']
+        # Symptoms
+        symptoms = ['pain', 'bleeding', 'swelling', 'sensitivity', 'bad breath', 'loose tooth']
+        
+        found_entities = {
+            'condition': next((c for c in conditions if c in question_lower), None),
+            'procedure': next((p for p in procedures if p in question_lower), None),
+            'symptom': next((s for s in symptoms if s in question_lower), None)
+        }
+        
+        return found_entities
+    
+    def _build_diagnosis_template(self, entities: Dict[str, str], context: str) -> str:
+        """Build dynamic diagnosis template"""
+        condition = entities.get('condition', 'dental condition')
+        symptom = entities.get('symptom', 'symptoms')
+        
+        return f"""
+DYNAMIC DIAGNOSIS RESPONSE for {condition.upper()}:
 
-STRUCTURE:
-**Diagnosis Assessment:**
-[Direct assessment of the condition]
+**Assessment:**
+Analyze the {condition} based on described {symptom}
 
-**Symptoms & Signs:**
-• [Key symptoms with bullet points]
-• [Clinical signs to look for]
-• [What patient is experiencing]
+**Key Indicators:**
+• Primary symptoms of {condition}
+• Clinical signs Dr. Tomar looks for
+• Severity assessment
 
-**Possible Causes:**
-• [Primary causes]
-• [Contributing factors]
-• [Risk factors]
+**Immediate Care:**
+• Steps to manage {symptom}
+• When to seek urgent care
+• Pain relief options
 
-**Immediate Recommendations:**
-• [Immediate care steps]
-• [Pain management if needed]
-• [When to seek urgent care]
+**Professional Evaluation:**
+For proper diagnosis of {condition}, contact Dr. Tomar at (425) 775-5162.
+"""
+    
+    def _build_treatment_template(self, entities: Dict[str, str], context: str) -> str:
+        """Build dynamic treatment template"""
+        procedure = entities.get('procedure', 'treatment')
+        condition = entities.get('condition', 'dental issue')
+        
+        return f"""
+DYNAMIC TREATMENT RESPONSE for {procedure.upper()}:
+
+**Treatment Overview:**
+Dr. Tomar's approach to {procedure} for {condition}
+
+**Process Steps:**
+• Consultation and examination
+• {procedure.title()} procedure details
+• Recovery and follow-up
+
+**Benefits:**
+• Resolves {condition}
+• Long-term oral health
+• Functional improvement
 
 **Next Steps:**
-• [Professional evaluation needed]
-• [Diagnostic tests if required]
-• [Treatment planning]
-
-**Professional Consultation:**
-For proper diagnosis and personalized treatment, I recommend consulting with Dr. Meenakshi Tomar directly. You can reach us at (425) 775-5162 to schedule an appointment.
-
-Example: "Based on your symptoms, this appears to be gingivitis according to Dr. Meenakshi Tomar's assessment.
-
-**Symptoms & Signs:**
-• Red, swollen gums
-• Bleeding during brushing or flossing
-• Bad breath (halitosis)
-• Tender or sensitive gums
-
-**Possible Causes:**
-• Plaque buildup along gum line
-• Poor oral hygiene habits
-• Hormonal changes
-• Certain medications
-
-**Immediate Recommendations:**
-• Improve brushing technique - gentle circular motions
-• Floss daily to remove plaque between teeth
-• Use antimicrobial mouthwash
-• Schedule professional cleaning with Dr. Tomar
-
-How long have you been experiencing these symptoms? 🦷"
-""",
-            
-            QueryType.TREATMENT: """
-RESPONSE FORMAT - COMPREHENSIVE TREATMENT EXPLANATION:
-ALWAYS provide detailed treatment information with sections and bullet points.
-
-STRUCTURE:
-**Treatment Overview:**
-[Brief explanation of the treatment]
-
-**Treatment Process:**
-• **Step 1:** [First phase with details]
-• **Step 2:** [Second phase with details]
-• **Step 3:** [Additional steps as needed]
-
-**What to Expect:**
-• [During treatment experience]
-• [Timeline and duration]
-• [Comfort measures]
-
-**Benefits:**
-• [Primary advantages]
-• [Long-term benefits]
-• [Functional improvements]
-
-**Post-Treatment Care:**
-• [Recovery instructions]
-• [Follow-up requirements]
-• [Maintenance needs]
-
-**Professional Consultation:**
-For detailed treatment planning and personalized care, I recommend consulting with Dr. Meenakshi Tomar directly. You can reach us at (425) 775-5162 to schedule an appointment.
-
-Example: "Let me explain crown implant treatment as performed by Dr. Meenakshi Tomar.
-
-**Treatment Overview:**
-Dr. Tomar performs crown implant procedures that replace missing teeth with a titanium post and custom crown, providing a permanent, natural-looking solution.
-
-**Treatment Process:**
-• **Consultation:** Dr. Tomar conducts comprehensive exam, X-rays, and treatment planning
-• **Implant Placement:** Dr. Tomar surgically inserts titanium post into jawbone
-• **Healing Period:** 3-6 months for osseointegration (bone fusion)
-• **Crown Attachment:** Dr. Tomar fabricates and places custom crown
-
-**Benefits:**
-• Permanent, long-lasting solution
-• Natural appearance and function
-• Preserves surrounding teeth and jawbone
-• No dietary restrictions
-
-Would you like to discuss the timeline or schedule a consultation with Dr. Tomar? 🦷"
-""",
-            
-            QueryType.PREVENTION: """
-RESPONSE FORMAT - DETAILED PREVENTION GUIDANCE:
-1. Answer the prevention question directly
-2. Key prevention strategies (use bullet points)
-3. Lifestyle recommendations
-4. Regular care importance
-5. Follow-up question
-
-Example: "To prevent gum disease, Dr. Meenakshi Tomar recommends a comprehensive approach.
-
-Key prevention strategies:
-• Brush twice daily with fluoride toothpaste
-• Floss daily to remove plaque between teeth
-• Use antimicrobial mouthwash
-• Avoid sugary snacks and drinks
-• Schedule regular cleanings every 6 months with Dr. Tomar
-
-These steps significantly reduce your risk of dental problems. For personalized preventive care recommendations, I recommend consulting with Dr. Meenakshi Tomar directly. You can reach us at (425) 775-5162 to schedule an appointment.
-
-When was your last professional cleaning? 💡"
-""",
-            
-            QueryType.EMERGENCY: """
-EMERGENCY ASSESSMENT PROTOCOL:
-1. IMMEDIATE CONCERN: Is this a dental emergency requiring urgent care?
-2. PAIN MANAGEMENT: Immediate steps to manage discomfort
-3. RISK EVALUATION: Potential complications if left untreated
-4. URGENT ACTIONS: What needs to be done right now
-5. FOLLOW-UP CARE: Next steps after immediate treatment
-6. PROFESSIONAL CONSULTATION: Contact Dr. Meenakshi Tomar at (425) 775-5162 for immediate care
-
-This requires immediate attention - here's my assessment:
-""",
-            
-            QueryType.PROCEDURE: """
-RESPONSE FORMAT - COMPREHENSIVE PROCEDURE EXPLANATION:
-ALWAYS provide detailed procedure information with sections and bullet points.
-
-STRUCTURE:
-**Procedure Overview:**
-[What the procedure involves]
-
-**Step-by-Step Process:**
-• **Preparation:** [Pre-procedure steps]
-• **During Procedure:** [What happens during treatment]
-• **Completion:** [Final steps and immediate aftercare]
-
-**Timeline & Duration:**
-• [How long each phase takes]
-• [Total treatment time]
-• [Number of visits required]
-
-**Comfort & Pain Management:**
-• [Anesthesia options]
-• [Comfort measures]
-• [Pain management strategies]
-
-**Recovery & Aftercare:**
-• [Immediate post-procedure care]
-• [Healing timeline]
-• [Activity restrictions]
-• [Follow-up appointments]
-
-**Expected Results:**
-• [Immediate outcomes]
-• [Long-term benefits]
-• [Success rates]
-
-Example: "Let me walk you through the root canal procedure as performed by Dr. Meenakshi Tomar.
-
-**Procedure Overview:**
-Dr. Tomar performs root canal therapy to remove infected pulp from inside the tooth and seal it to prevent further infection.
-
-**Step-by-Step Process:**
-• **Preparation:** Dr. Tomar administers local anesthesia and places rubber dam
-• **Access:** Dr. Tomar creates small opening in tooth crown
-• **Cleaning:** Dr. Tomar removes infected pulp and cleans canals
-• **Sealing:** Dr. Tomar fills and seals the tooth
-
-Would you like to schedule a consultation with Dr. Tomar? 🦷"
-""",
-            
-            QueryType.SCHEDULING: """
-SCHEDULING RESPONSE - INTELLIGENT STATUS-BASED RESPONSES:
-
-You are Dr. Tomar's scheduling assistant. Use your intelligence to understand the user's scheduling intent and respond appropriately based on current office status.
-
-SCHEDULING INTELLIGENCE GUIDELINES:
-
-1. APPOINTMENT BOOKING REQUESTS ("can i schedule", "book appointment", etc.):
-   - If clinic is OPEN now: "Our clinic is open at the moment, so please give us a call, and we can try to make an appointment for a time that works for your schedule. Call (425) 775-5162."
-   - If clinic is CLOSED now: "While I am unable to make or modify appointments, our scheduling team is available from 7 AM to 6 PM, Mon, Tue, and Thu on the phone at (425) 775-5162. They will be happy to assist you."
-
-2. SAME-DAY REQUESTS ("same day appointment", "today appointment"):
-   - Always respond: "Edmonds Bay Dental does offer same-day appointments when possible. Please call us at (425) 775-5162 to check on specific availability."
-
-3. "CAN YOU SEE ME" REQUESTS:
-   - If TODAY is OPEN: "Dr. Tomar sees patients till 6 PM today ([current day]). Please call our clinic at (425) 775-5162 to check on specific availability."
-   - If TODAY is CLOSED: "Dr. Tomar's office is closed today. Our next available days are Monday, Tuesday, and Thursday from 7 AM to 6 PM. Please call (425) 775-5162."
-
-4. OFFICE HOURS INQUIRIES ("what time do you open", "office hours"):
-   - If asking DURING open hours: "Edmonds Bay Dental is open today till 6 PM. We are in the clinic on the following days and times: Monday: 7 AM - 6 PM, Tuesday: 7 AM - 6 PM, Wednesday: CLOSED, Thursday: 7 AM - 6 PM, Friday-Sunday: CLOSED. Please give us a call at (425) 775-5162 if you need help scheduling an appointment."
-   - If asking on CLOSED day: "Edmonds Bay Dental is closed today. Our office hours are Monday, Tuesday, and Thursday from 7 AM to 6 PM. Please call (425) 775-5162."
-
-5. APPOINTMENT MODIFICATIONS ("cancel", "reschedule"):
-   - Always respond: "While I am unable to make or modify appointments, our scheduling team is available from 7 AM to 6 PM, Mon, Tue, and Thu on the phone at (425) 775-5162. They will be happy to assist you."
-
-6. COST INQUIRIES in scheduling context:
-   - Always respond: "While I am unable to offer specific pricing/costs for procedures, our scheduling team at (425) 775-5162 would be happy to answer your questions. They are available from 7 AM to 6 PM, Mon, Tue and Thu."
-
-7. INSURANCE INQUIRIES in scheduling context:
-   - Always respond: "Edmonds Bay Dental participates in most Private Dental PPO plans. Please call our scheduling team at (425) 775-5162 to confirm acceptance of your particular insurance plan."
-
-IMPORTANT: Use your AI intelligence to understand the user's intent and current office status to provide the most appropriate response. Don't just follow templates - think about what the user needs based on their question and the current situation.
-
-Always include phone number (425) 775-5162 and be helpful and professional.
-""",
-            QueryType.COST: """
-FOR COST/PRICING QUESTIONS:
-NEVER provide specific prices or dollar amounts. ALWAYS redirect to office contact.
-
-RESPONSE FORMAT:
-"Dr. Tomar provides personalized treatment plans with pricing that varies based on individual needs and treatment complexity.
-
-Factors that Dr. Tomar considers for pricing:
-• Complexity of your specific case
-• Materials and techniques required
-• Number of visits needed
-• Your insurance coverage
-
-For accurate pricing information tailored to your specific needs, please contact Dr. Tomar's office directly at (425) 775-5162 to schedule a consultation where Dr. Tomar can provide you with detailed cost information.
-
-Would you like to know more about the treatment process itself? 💰"
-
-IMPORTANT: 
-1. Do NOT mention any specific dollar amounts, prices, or numbers
-2. Always redirect to office contact for pricing
-3. Each bullet point must be on a separate line with proper spacing
-4. Use proper line breaks between sections
-""",
-            QueryType.GENERAL: """
-FOR SIMPLE "WHAT IS" QUESTIONS - VERY SHORT FORMAT:
-1. Answer in 1-2 sentences
-2. Use 2-3 bullet points maximum
-3. Ask if they want detailed explanation
-4. Add consultation info for health concerns
-5. Use contextual emoji
-
-FOR LOCATION/OFFICE QUESTIONS:
-If user asks about office location, address, directions, or where to find the clinic, respond with EXACTLY:
-"Dr. Tomar's office is located at Edmonds Bay Dental in Edmonds, WA. Call (425) 775-5162 to schedule an appointment. <a href='https://bit.ly/ugdsw3' target='_blank' style='color: #4f46e5; text-decoration: underline; font-weight: bold;'> Google Maps</a>"
-
-FOR OTHER GENERAL QUESTIONS:
-1. Check conversation history for context first
-2. If follow-up question relates to previous topic, reference it: "Regarding the [previous topic] we discussed..."
-3. If no clear context, ask for clarification: "Could you specify which procedure/treatment you're asking about?"
-4. Answer the question directly with context
-5. Give practical advice
-6. Ask follow-up if needed
-7. Use bullet points for clarity
-8. Use contextual emoji
-9. Always end with consultation recommendation for any health concern
-
-Provide a brief, professional response and include consultation information when discussing any dental condition or disease:
+Schedule {procedure} consultation with Dr. Tomar at (425) 775-5162.
 """
+    
+    def _build_procedure_template(self, entities: Dict[str, str], context: str) -> str:
+        """Build dynamic procedure template"""
+        procedure = entities.get('procedure', 'dental procedure')
+        
+        return f"""
+DYNAMIC PROCEDURE RESPONSE for {procedure.upper()}:
+
+**Procedure Details:**
+How Dr. Tomar performs {procedure}
+
+**Step-by-Step:**
+• Preparation phase
+• {procedure.title()} execution
+• Completion and care
+
+**Timeline:**
+• Duration of {procedure}
+• Recovery period
+• Follow-up schedule
+
+**Consultation:**
+Discuss {procedure} with Dr. Tomar at (425) 775-5162.
+"""
+    
+    def _build_general_template(self) -> str:
+        """Build general template"""
+        return """
+GENERAL DENTAL RESPONSE:
+
+**Information:**
+Provide relevant dental information
+
+**Recommendations:**
+• Professional advice
+• Care instructions
+• Prevention tips
+
+**Contact:**
+For detailed information, contact Dr. Tomar at (425) 775-5162.
+"""
+
+    def get_dynamic_prompt(self, query_type: QueryType, user_question: str, context: str = "") -> str:
+        """Get dynamic prompt based on query type and context"""
+        return self._generate_dynamic_template(query_type, user_question, context)
+
+    def _get_reasoning_templates(self) -> Dict[QueryType, str]:
+        # Keep minimal static templates for fallback
+        return {
+            QueryType.DIAGNOSIS: "Brief diagnosis guidance",
+            QueryType.TREATMENT: "Brief treatment information",
+            QueryType.PROCEDURE: "Brief procedure explanation",
+            QueryType.PREVENTION: "Brief prevention guidance",
+            QueryType.EMERGENCY: "Emergency assessment protocol",
+
+            QueryType.SCHEDULING: "Intelligent scheduling responses",
+            QueryType.COST: "Cost guidance with office contact",
+            QueryType.GENERAL: "Brief general responses with consultation info"
         }
 
     def get_chain_of_thought_prompt(self, query_type: QueryType, user_question: str, context: str = "", conversation_history: str = "") -> str:
@@ -561,72 +470,64 @@ IMPROVED RESPONSE:
 """
 # working
 class QueryClassifier:
-    """Classifies user queries into appropriate categories"""
+    """AI-powered query classifier using OpenAI"""
     
-    def __init__(self):
-        self.classification_keywords = {
-            QueryType.DIAGNOSIS: [
-                "pain", "hurt", "ache", "swollen", "bleeding", "sensitive", "symptoms",
-                "what's wrong", "diagnosis", "problem", "issue", "concern", "feels like"
-            ],
-            QueryType.TREATMENT: [
-                "treatment", "fix", "repair", "cure", "heal", "options", "what can be done",
-                "how to treat", "therapy", "medication", "surgery"
-            ],
-            QueryType.PREVENTION: [
-                "prevent", "avoid", "stop", "care", "maintenance", "hygiene", "brush",
-                "floss", "diet", "habits", "routine", "protect"
-            ],
-            QueryType.EMERGENCY: [
-                "emergency", "urgent", "severe", "unbearable", "can't sleep", "swelling",
-                "infection", "trauma", "accident", "broken", "knocked out"
-            ],
-            QueryType.PROCEDURE: [
-                "procedure", "surgery", "operation", "implant", "crown", "filling",
-                "root canal", "extraction", "cleaning", "whitening", "braces"
-            ],
-            QueryType.SCHEDULING: [
-                "appointment", "schedule", "book", "available", "open", "closed", "hours",
-                "today", "tomorrow", "when", "can you see me", "availability", "visit",
-                "come in", "office hours", "what time", "when do you open", "are you open"
-            ],
-            QueryType.COST: [
-                "cost", "price", "expensive", "cheap", "fee", "charge", "payment",
-                "how much", "what does it cost", "pricing", "afford", "insurance"
-            ]
-        }
+    def __init__(self, openai_client=None):
+        self.client = openai_client
     
-    def classify_query(self, user_question: str) -> QueryType:
-        """Classify user question into appropriate category"""
-        question_lower = user_question.lower()
+    def classify_query(self, user_question: str, openai_client=None) -> QueryType:
+        """AI-powered query classification"""
         
-        # Check for emergency keywords first
-        for keyword in self.classification_keywords[QueryType.EMERGENCY]:
-            if keyword in question_lower:
-                return QueryType.EMERGENCY
+        client = openai_client or self.client
+        if not client:
+            # Fallback to general if no OpenAI client
+            return QueryType.GENERAL
         
-        # Check for cost keywords
-        for keyword in self.classification_keywords[QueryType.COST]:
-            if keyword in question_lower:
-                return QueryType.COST
-        
-        # Score each category
-        scores = {}
-        for query_type, keywords in self.classification_keywords.items():
-            score = sum(1 for keyword in keywords if keyword in question_lower)
-            scores[query_type] = score
-        
-        # Return category with highest score only if score is high enough, default to GENERAL
-        max_score = max(scores.values()) if scores.values() else 0
-        if max_score >= 2:  # Require at least 2 keyword matches for non-GENERAL classification
-            return max(scores, key=scores.get)
-        elif max_score == 1:
-            # For single keyword matches, be more selective
-            top_category = max(scores, key=scores.get)
-            if top_category in [QueryType.EMERGENCY, QueryType.COST]:  # Keep these with single match
-                return top_category
-        
-        return QueryType.GENERAL
+        try:
+            classification_prompt = f"""
+Analyze this dental consultation question and classify it into ONE category.
+
+User Question: "{user_question}"
+
+Categories:
+- DIAGNOSIS: Questions about symptoms, pain, problems, "what's wrong", identifying conditions
+- TREATMENT: Questions about fixing problems, treatment options, procedures, "how to treat"
+- PREVENTION: Questions about preventing problems, oral hygiene, care tips, maintenance
+- EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling
+- PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
+- SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open"
+- COST: Questions about pricing, fees, insurance, "how much does it cost"
+- GENERAL: Simple definitions, basic information, general dental questions
+
+Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
+"""
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": classification_prompt}],
+                temperature=0.1,
+                max_tokens=20
+            )
+            
+            result = response.choices[0].message.content.strip().upper()
+            
+            # Map result to QueryType
+            type_mapping = {
+                "DIAGNOSIS": QueryType.DIAGNOSIS,
+                "TREATMENT": QueryType.TREATMENT, 
+                "PREVENTION": QueryType.PREVENTION,
+                "EMERGENCY": QueryType.EMERGENCY,
+                "PROCEDURE": QueryType.PROCEDURE,
+                "SCHEDULING": QueryType.SCHEDULING,
+                "COST": QueryType.COST,
+                "GENERAL": QueryType.GENERAL
+            }
+            
+            return type_mapping.get(result, QueryType.GENERAL)
+            
+        except Exception as e:
+            # Fallback to general on error
+            return QueryType.GENERAL
 
 # Example usage and testing
 if __name__ == "__main__":

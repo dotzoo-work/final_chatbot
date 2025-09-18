@@ -7,11 +7,11 @@
 !.github/**
 
 # Frontend files
- #frontend/
+ frontend/
 
 # Root level files
-#.env
-#.env.example
+.env
+.env.example
 .deployignore
 .dockerignore
 .python-version
@@ -29,7 +29,7 @@ backend/*.pyd
 backend/.Python
 backend/logs/
 backend/conversation_memory/
-#backend/.env
+backend/.env
 backend/temp/
 backend/test_mongodb.py
 backend/.venv/

@@ -31,8 +31,11 @@ class AdvancedRAGPipeline:
         # Token counter for context management
         self.encoding = tiktoken.encoding_for_model("gpt-4o-mini")
         self.max_context_tokens = 3000
+        
+        # FAQ context
+        self.faq_context = self._get_faq_context()
 
-        logger.info("Advanced RAG Pipeline initialized with OpenAI embeddings")
+        logger.info("Advanced RAG Pipeline initialized with OpenAI embeddings and FAQ context")
     
     def enhanced_retrieval(
         self,
@@ -151,17 +154,72 @@ class AdvancedRAGPipeline:
         total_boost = exact_match_boost + medical_boost + doctor_boost
         return min(total_boost, 0.5)  # Cap at 0.5
     
+    def _get_faq_context(self) -> str:
+        """Get FAQ context with template variables replaced"""
+        return """
+FREQUENTLY ASKED QUESTIONS (FAQ):
+
+
+
+Q. Can you schedule an appointment for me? 
+A. Unfortunately, I cannot book an appointment directly. Please call our clinic at (425) 775-5162 and our team will be happy to help you with scheduling.
+
+
+
+
+Q. Do you accept Bitcoin? 
+A. Edmonds Bay Dental does not accept Bitcoin. We accept cash, all major credit cards, and insurance.
+
+Q. Do you offer laughing gas? 
+A. Dr. Tomar does not use laughing gas. Instead, she uses single anesthesia to ensure comfort during procedures.
+
+Q. Do you offer silver fillings? 
+A. Dr. Tomar does not provide silver (amalgam) fillings. She prefers composite fillings, which are more aesthetically pleasing and often lead to better outcomes.
+
+Q. Do you offer Botox? 
+A. Dr. Tomar does not perform Botox treatments. Please contact our clinic for details on the procedures we do offer.
+
+Q. Do you treat toddlers? 
+A. Yes, Dr. Tomar treats toddlers. Please contact our clinic for specific details and to schedule an appointment.
+
+Q. Do you have a hygienist? 
+A. Edmonds Bay Dental does not have a hygienist. Dr. Tomar is assisted by qualified dental assistants.
+
+Q. Do you accept Medicare? 
+A. Edmonds Bay Dental does not participate in Medicare insurance plans. Please contact our clinic to learn about our in-house plans and options.
+
+Q. Do you accept Apple Health? 
+A. Edmonds Bay Dental does not participate in Apple Health plans. Please contact our clinic to learn about our in-house plans and options.
+
+Q. Do you offer free coffee at your clinic? 
+A. We do not offer free coffee, but we do our best to make your visit as comfortable as possible.
+
+Q. Can I use the bathroom at your clinic? 
+A. Our facilities are reserved for patients with appointments.
+
+Q. Do you have another dental location? 
+A. Yes. Dr. Tomar also practices at Pacific Highway Dental Clinic.Location -27020 Pacific Highway South, Suite C,
+
+Kent, WA 98032. Please contact the clinic for exact address and hours.
+"""
+    
     def context_optimization(self, chunks: List[RetrievedChunk], query: str) -> str:
-        """Optimize context for token limits and relevance"""
-        
-        if not chunks:
-            return ""
-        
-        # Sort chunks by relevance score
-        sorted_chunks = sorted(chunks, key=lambda x: x.relevance_score, reverse=True)
+        """Optimize context for token limits and relevance with FAQ integration"""
         
         context_parts = []
         total_tokens = 0
+        
+        # Add FAQ context first
+        faq_tokens = len(self.encoding.encode(self.faq_context))
+        if faq_tokens < self.max_context_tokens // 3:  # Use max 1/3 for FAQ
+            context_parts.append(self.faq_context + "\n\n")
+            total_tokens += faq_tokens
+        
+        if not chunks:
+            return self.faq_context
+        
+        # Sort chunks by relevance score
+        sorted_chunks = sorted(chunks, key=lambda x: x.relevance_score, reverse=True)
         
         # Add query-specific context header
         context_header = f"RELEVANT MEDICAL KNOWLEDGE FOR: {query}\n\n"
@@ -180,9 +238,22 @@ class AdvancedRAGPipeline:
             context_parts.append(chunk_text)
             total_tokens += chunk_tokens
         
-        final_context = context_header + "".join(context_parts)
+        # Add knowledge base chunks
+        for i, chunk in enumerate(sorted_chunks):
+            chunk_text = f"CONTEXT {i+1}:\n{chunk.content}\n\n"
+            chunk_tokens = len(self.encoding.encode(chunk_text))
+            
+            # Check if adding this chunk would exceed token limit
+            if total_tokens + chunk_tokens > self.max_context_tokens:
+                logger.info(f"Context truncated at {i} chunks due to token limit")
+                break
+            
+            context_parts.append(chunk_text)
+            total_tokens += chunk_tokens
         
-        logger.info(f"Optimized context: {total_tokens} tokens, {len(context_parts)} chunks")
+        final_context = "".join(context_parts)
+        
+        logger.info(f"Optimized context with FAQ: {total_tokens} tokens, {len(sorted_chunks) if chunks else 0} chunks")
         return final_context
     
     def query_expansion(self, original_query: str) -> List[str]:

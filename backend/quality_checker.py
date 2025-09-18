@@ -18,7 +18,7 @@ class QualityIssue(Enum):
     NO_FOLLOW_UP = "Response doesn't include follow-up question"
     UNCLEAR_ADVICE = "Advice is unclear or not actionable"
     MISSING_REASONING = "Missing step-by-step reasoning"
-    INAPPROPRIATE_TONE = "Tone is not professional or caring"
+    INAPPROPRIATE_TONE = "Tone is not professional or caring, or contains meta-commentary"
     FACTUAL_CONCERNS = "Potential factual accuracy concerns"
     NO_DISCLAIMER = "Missing appropriate medical disclaimers"
 
@@ -83,13 +83,22 @@ class ResponseQualityChecker:
             "dr. tomar recommends", "dr. tomar performs", "dr. tomar does", "dr. tomar specializes",
             "based on", "clinically", "professional", "dr. tomar's experience"
         ]
-        # Check for inappropriate first person usage
+        # Check for inappropriate first person usage and meta-commentary
         first_person_issues = ["i recommend", "i perform", "i do", "i've seen", "in my experience"]
+        meta_commentary = [
+            "this response has been adjusted", "here's a revised response", "certainly! here", 
+            "response that incorporates", "adjusted to reflect", "more engaging tone", 
+            "while maintaining professionalism", "while ensuring clarity"
+        ]
         has_first_person = any(phrase in ai_response.lower() for phrase in first_person_issues)
+        has_meta_commentary = any(phrase in ai_response.lower() for phrase in meta_commentary)
         
         if has_first_person:
             issues.append(QualityIssue.INAPPROPRIATE_TONE)
             suggestions.append("Refer to Dr. Tomar in third person, not first person - you are the assistant")
+        elif has_meta_commentary:
+            issues.append(QualityIssue.INAPPROPRIATE_TONE)
+            suggestions.append("Remove meta-commentary about response adjustments - respond directly as assistant")
         elif not any(indicator in ai_response.lower() for indicator in professional_indicators):
             issues.append(QualityIssue.INAPPROPRIATE_TONE)
             suggestions.append("Use proper references to Dr. Tomar and professional dental terminology")
@@ -234,7 +243,13 @@ PREVIOUS RESPONSE QUALITY FEEDBACK:
 PREVIOUS RESPONSE:
 {current_response}
 
-Please provide an improved response that addresses all the quality issues mentioned above while maintaining Dr. Meenakshi Tomar's professional and caring persona.
+CRITICAL INSTRUCTIONS:
+- Provide ONLY the improved response content - NO meta-commentary
+- Do NOT explain what you changed or how you improved it
+- Do NOT include phrases like "This response has been adjusted" or "Here's a revised response"
+- Do NOT mention empathy, warmth, tone, or professionalism in your response
+- Respond DIRECTLY as Dr. Tomar's assistant would to the patient
+- Address the quality issues silently without mentioning them
 
 IMPROVED RESPONSE:"""
             
@@ -247,13 +262,45 @@ IMPROVED RESPONSE:"""
                     max_tokens=1500
                 )
                 current_response = response.choices[0].message.content
+                # Clean meta-commentary immediately after generation
+                current_response = self._remove_meta_commentary(current_response)
                 attempts += 1
                 
             except Exception as e:
                 logger.error(f"Error during reprompting: {e}")
                 break
         
+        # Final cleanup - remove any remaining meta-commentary
+        current_response = self._remove_meta_commentary(current_response)
+        
         return current_response, attempts, quality_scores
+    
+    def _remove_meta_commentary(self, response: str) -> str:
+        """Remove meta-commentary from response"""
+        
+        # Patterns to remove
+        meta_patterns = [
+            r"^.*?this response has been adjusted.*?\n",
+            r"^.*?here's a revised response.*?\n",
+            r"^.*?certainly! here.*?\n",
+            r"^.*?response that incorporates.*?\n",
+            r"^.*?adjusted to reflect.*?\n",
+            r"^.*?more engaging tone.*?\n",
+            r"^.*?while maintaining professionalism.*?\n",
+            r"^.*?while ensuring clarity.*?\n",
+            r"^.*?empathy.*?warmth.*?engaging.*?\n",
+            r"^.*?incorporates empathy.*?\n"
+        ]
+        
+        cleaned_response = response
+        
+        for pattern in meta_patterns:
+            cleaned_response = re.sub(pattern, "", cleaned_response, flags=re.IGNORECASE | re.MULTILINE)
+        
+        # Remove empty lines at the beginning
+        cleaned_response = cleaned_response.lstrip("\n\r ")
+        
+        return cleaned_response
 
 # Example usage
 if __name__ == "__main__":

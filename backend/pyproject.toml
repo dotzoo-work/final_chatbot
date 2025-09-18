@@ -1,0 +1,22 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.40.32",
+    "fastapi>=0.116.2",
+    "loguru>=0.7.3",
+    "openai>=1.107.3",
+    "pinecone>=7.3.0",
+    "pydantic>=2.11.9",
+    "pymongo>=4.15.1",
+    "python-dotenv>=1.1.1",
+    "python-multipart>=0.0.20",
+    "pytz>=2025.2",
+    "requests>=2.32.5",
+    "sendgrid>=6.12.4",
+    "tiktoken>=0.11.0",
+    "uvicorn>=0.35.0",
+]

@@ -123,7 +123,8 @@ GENERAL CONSULTATION SPECIALIZATION:
 - Dr. Tomar is expert in comprehensive dental care coordination
 - Dr. Tomar is skilled in patient communication and education
 - Dr. Tomar is experienced in holistic oral health assessment
-- Dr. Tomar focuses on overall patient wellbeing and care continuity
+- Dr. Tomar focuses on overall patient wellbeing and care continuity.
+- Dr tomar only give Dental related problem solution not out of the context.
 """
         }
         
@@ -142,8 +143,8 @@ GENERAL CONSULTATION SPECIALIZATION:
         if query_type:
             agent_query_type = query_type
         else:
-            classifier = QueryClassifier()
-            agent_query_type = classifier.classify_query(user_question)
+            classifier = QueryClassifier(self.client)
+            agent_query_type = classifier.classify_query(user_question, self.client)
         
         # Generate specialized prompt with conversation history
         specialist_persona = self.get_specialist_persona()
@@ -163,6 +164,9 @@ GENERAL CONSULTATION SPECIALIZATION:
                 max_tokens=1500
             )
             initial_response = response.choices[0].message.content
+            
+            # Clean initial response first
+            initial_response = self._remove_meta_commentary(initial_response)
             
             # Improve response through reprompting
             final_response, attempts, quality_scores = self.reprompting_system.improve_response_with_reprompting(
@@ -194,6 +198,34 @@ GENERAL CONSULTATION SPECIALIZATION:
                 quality_score=0.0,
                 attempts_used=1
             )
+    
+    def _remove_meta_commentary(self, response: str) -> str:
+        """Remove meta-commentary from response"""
+        import re
+        
+        # Patterns to remove
+        meta_patterns = [
+            r"^.*?this response has been adjusted.*?\n",
+            r"^.*?here's a revised response.*?\n",
+            r"^.*?certainly! here.*?\n",
+            r"^.*?response that incorporates.*?\n",
+            r"^.*?adjusted to reflect.*?\n",
+            r"^.*?more engaging tone.*?\n",
+            r"^.*?while maintaining professionalism.*?\n",
+            r"^.*?while ensuring clarity.*?\n",
+            r"^.*?empathy.*?warmth.*?engaging.*?\n",
+            r"^.*?incorporates empathy.*?\n"
+        ]
+        
+        cleaned_response = response
+        
+        for pattern in meta_patterns:
+            cleaned_response = re.sub(pattern, "", cleaned_response, flags=re.IGNORECASE | re.MULTILINE)
+        
+        # Remove empty lines at the beginning
+        cleaned_response = cleaned_response.lstrip("\n\r ")
+        
+        return cleaned_response
     
     def _extract_reasoning_steps(self, response: str) -> List[str]:
         """Extract reasoning steps from response"""
@@ -289,7 +321,7 @@ User Question: "{user_question}"
 Intent Categories:
 - schedule_request: User wants to book/schedule/make an appointment
 - same_day_request: User asking about same-day appointments or availability today
-- see_me_request: User asking "can you see me" or when they can be seen
+- see_me_request: User asking "can you see me" or when they can be seen (includes TODAY or TOMORROW)
 - hours_inquiry: User asking about office hours, opening times, or when clinic is open
 - modify_appointment: User wants to cancel, reschedule, or change existing appointment
 - cost_inquiry: User asking about prices, costs, or fees for procedures
@@ -344,7 +376,7 @@ Our clinic is open at the moment, so please give us a call, and we can try to ma
 **Contact Information:**
 • Phone: (425) 775-5162
 • Location: Edmonds Bay Dental, Edmonds, WA
-• Available: We can find a time that works for your schedule
+
 
 If TODAY IS CLOSED ({time_info['current_day']} and office is CLOSED):
 While I am unable to make or modify appointments, our scheduling team is available to help.
@@ -352,7 +384,7 @@ While I am unable to make or modify appointments, our scheduling team is availab
 **Scheduling Team:**
 • Phone: (425) 775-5162
 • Available: 7 AM to 6 PM, Mon, Tue, and Thu
-• Service: They will be happy to assist you
+
 
 CRITICAL FORMATTING REQUIREMENTS:
 1. Check the CURRENT DAY STATUS above to determine if office is open or closed TODAY
@@ -374,42 +406,59 @@ Edmonds Bay Dental does offer same-day appointments when possible.
 **Availability Details:**
 • Today: {time_info['current_day']} - {'Available (Office Open)' if current_day_status['is_open'] else 'Not Available (Office Closed)'}
 • Contact: (425) 775-5162 to check specific availability
-• Quick Response: Call now for fastest scheduling
+• Quick Response: Call now for fastest scheduling Appointment.
 
-IMPORTANT: 
-1. Check the CURRENT DAY STATUS above to determine availability
-2. Each bullet point must be on a separate line with proper spacing
-3. Show correct availability based on office status
+IMPORTANT INSTRUCTIONS (DO NOT INCLUDE IN RESPONSE):
+- Check the CURRENT DAY STATUS above to determine availability
+- Each bullet point must be on a separate line with proper spacing
+- Show correct availability based on office status
+- Do not include these instructions in your response
 
 User: "{user_question}"
 """,
             
             "see_me_request": f"""
 {context}
-User asking "can you see me". Check current day status first:
+User asking "can you see me" - check if they mean TODAY or TOMORROW:
 
 CURRENT DAY STATUS: {time_info['current_day']} - {'OPEN' if current_day_status['is_open'] else 'CLOSED'}
+TOMORROW STATUS: {time_info['tomorrow_day']} - {'OPEN' if tomorrow_day_status['is_open'] else 'CLOSED'}
 
-If TODAY IS OPEN ({time_info['current_day']} and office is OPEN):
+If user asks about TOMORROW and TOMORROW IS OPEN:
+Yes! Dr. Tomar can see you tomorrow ({time_info['tomorrow_day']}).
+
+**Tomorrow's Availability:**
+• Day: {time_info['tomorrow_day']}
+• Hours: 7 AM to 6 PM
+• Contact: (425) 775-5162 to schedule your appointment
+
+If user asks about TOMORROW and TOMORROW IS CLOSED:
+Dr. Tomar's office is closed tomorrow ({time_info['tomorrow_day']}).
+
+**Next Available:**
+• Days: Monday, Tuesday, and Thursday
+• Hours: 7 AM to 6 PM
+• Please Call Us: (425) 775-5162 for appointments
+
+If user asks about TODAY and TODAY IS OPEN:
 Dr. Tomar sees patients till 6 PM today ({time_info['current_day']}).
 
 **Today's Details:**
 • Status: Open until 6 PM
 • Contact: (425) 775-5162 to check specific availability
-• Location: Edmonds Bay Dental, Edmonds, WA
 
-If TODAY IS CLOSED ({time_info['current_day']} and office is CLOSED):
-Dr. Tomar's office is closed today.
+If user asks about TODAY and TODAY IS CLOSED:
+Dr. Tomar's office is closed today ({time_info['current_day']}).
 
 **Next Available:**
 • Days: Monday, Tuesday, and Thursday
 • Hours: 7 AM to 6 PM
-• Contact: (425) 775-5162 to schedule
+• Please Call Us: (425) 775-5162 for appointments
 
 IMPORTANT: 
-1. Check the CURRENT DAY STATUS above to determine if office is open or closed TODAY
-2. Each bullet point must be on a separate line with proper spacing
-3. Use the correct response based on whether office is OPEN or CLOSED today
+1. Detect if user is asking about TODAY or TOMORROW from their question
+2. Use the appropriate status (current day or tomorrow) based on their question
+3. Each bullet point must be on a separate line with proper spacing
 
 User: "{user_question}"
 """,
@@ -428,9 +477,9 @@ Office Hours:
 • Tuesday: 7 AM - 6 PM
 • Wednesday: CLOSED
 • Thursday: 7 AM - 6 PM
-• Friday-Sunday: CLOSED
+• Friday,Saturday and Sunday: CLOSED
 
-Contact: (425) 775-5162 for appointments
+Please Call Us: (425) 775-5162 for appointments
 
 If TODAY IS CLOSED ({time_info['current_day']} and office is CLOSED):
 Edmonds Bay Dental is closed today.
@@ -439,9 +488,9 @@ Office Hours:
 • Monday: 7 AM - 6 PM
 • Tuesday: 7 AM - 6 PM
 • Thursday: 7 AM - 6 PM
-• Wednesday, Friday-Sunday: CLOSED
+• Wednesday,Saturday, and Friday-Sunday: CLOSED
 
-Contact: (425) 775-5162 to schedule
+Please Call Us: (425) 775-5162 for appointments
 
 IMPORTANT: 
 1. Check the CURRENT DAY STATUS above to determine if office is open or closed TODAY
@@ -495,21 +544,35 @@ User: "{user_question}"
             
             "insurance_inquiry": f"""
 {context}
-User asking about insurance. Check current day status first:
+User asking about insurance. Provide specific insurance information:
 
-CURRENT DAY STATUS: {time_info['current_day']} - {'OPEN' if current_day_status['is_open'] else 'CLOSED'}
+Dr. Tomar accepts most Private Dental PPO plans including:
+• United Healthcare (UHC)
+• Aetna  
+• Premera
+• Delta Dental
+• Delta
+• MetLife
+• Blue Cross
+• Blue Shield
+• Anthem
+• Lifewise
+• Cigna
+• Humana
+• Ameritas
+• United Concordia
+• Careington
+• Spirit Dental
 
-Edmonds Bay Dental participates in most Private Dental PPO plans.
+**For Specific Plan Confirmation:**
+• Contact: (425) 775-5162
+• Available: 7 AM to 6 PM, Mon, Tue, and Thu
 
-**Insurance Details:**
-• Accepted: Most Private Dental PPO plans
-• Verification: Call (425) 775-5162 to confirm your specific plan
-• Benefits: Our team can help maximize your coverage
 
 IMPORTANT: 
-1. Check the CURRENT DAY STATUS above for reference
-2. Each bullet point must be on a separate line with proper spacing
-3. Always provide insurance information regardless of current status
+1. If user asks about specific insurance (like Spirit Dental), confirm Dr. Tomar accepts it
+2. Always direct to scheduling team for specific plan details
+3. Each bullet point must be on a separate line with proper spacing
 
 User: "{user_question}"
 """
@@ -529,6 +592,7 @@ User: "{user_question}"
         logger.info(f"🗓️ Current Day: {time_info['current_day']} - {'OPEN' if current_day_status['is_open'] else 'CLOSED'}")
         logger.info(f"🗓️ Tomorrow: {time_info['tomorrow_day']} - {'OPEN' if tomorrow_day_status['is_open'] else 'CLOSED'}")
         logger.info(f"🕐 Current Time: {time_info['current_time']} ({time_info['timezone']})")
+        logger.info(f"❓ User Question: {user_question}")
         
         # Detect specific intent
         intent = self.detect_scheduling_intent(user_question)
@@ -542,7 +606,7 @@ User: "{user_question}"
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": scheduling_prompt}],
                 temperature=0.1,
-                max_tokens=300
+                max_tokens=400
             )
             
             content = response.choices[0].message.content
@@ -579,7 +643,7 @@ class MultiAgentOrchestrator:
     def __init__(self, openai_client, pinecone_api_key: str):
         self.client = openai_client
         self.rag_pipeline = AdvancedRAGPipeline(openai_client, pinecone_api_key)
-        self.query_classifier = QueryClassifier()
+        self.query_classifier = QueryClassifier(openai_client)
         
         # Initialize specialist agents
         self.agents = {
@@ -599,11 +663,11 @@ class MultiAgentOrchestrator:
     def route_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Route query to appropriate specialist agent"""
         
-        # Classify the query
-        query_type = self.query_classifier.classify_query(user_question)
+        # AI-powered query classification
+        query_type = self.query_classifier.classify_query(user_question, self.client)
         
-        # Special handling for scheduling queries
-        if query_type == QueryType.SCHEDULING or self._is_scheduling_query(user_question):
+        # Route to scheduling agent if classified as scheduling
+        if query_type == QueryType.SCHEDULING:
             return self.agents[AgentType.SCHEDULING].process_scheduling_query(user_question, context)
         
         # Route to appropriate agent
@@ -617,46 +681,24 @@ class MultiAgentOrchestrator:
         
         return agent.process_query(user_question, rag_context, query_type)
     
-    def _is_scheduling_query(self, user_question: str) -> bool:
-        """AI-powered scheduling query detection"""
-        
-        try:
-            intent_prompt = f"""
-Analyze this user question and determine if it's related to scheduling/appointments.
 
-User Question: "{user_question}"
-
-Is this question about:
-- Scheduling appointments
-- Booking appointments  
-- Office hours/availability
-- Asking to see the doctor
-- Appointment changes/cancellations
-- Same-day appointments
-- Insurance/cost related to scheduling
-
-Respond with only: YES or NO
-"""
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": intent_prompt}],
-                temperature=0.1,
-                max_tokens=10
-            )
-            
-            result = response.choices[0].message.content.strip().upper()
-            return result == "YES"
-            
-        except Exception as e:
-            logger.error(f"AI scheduling detection error: {e}")
-            # Fallback to basic keyword check
-            return "appointment" in user_question.lower() or "schedule" in user_question.lower()
     
     def process_consultation(self, user_question: str, conversation_history: str = "") -> AgentResponse:
         """Main consultation processing with agent orchestration"""
         
         logger.info(f"Processing consultation: {user_question[:50]}...")
+        
+        # Check for greeting messages
+        greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']
+        if user_question.lower().strip() in greeting_words:
+            return AgentResponse(
+                content="Welcome to Edmonds Bay Dental! How can I help you today?",
+                confidence=1.0,
+                agent_type=AgentType.GENERAL,
+                reasoning_steps=["Detected greeting message"],
+                quality_score=100.0,
+                attempts_used=1
+            )
         
         # 1. Retrieve relevant context
         context, retrieved_chunks = self.rag_pipeline.retrieve_and_rank(user_question)
@@ -681,9 +723,9 @@ Respond with only: YES or NO
         return response
     
     def _add_consultation_recommendation(self, response_content: str, user_question: str) -> str:
-        """Add consultation recommendation for disease/condition related queries"""
+        """Add consultation recommendation for dental disease/condition related queries"""
         
-        # Keywords that indicate disease, condition, or health concerns
+        # Keywords that indicate disease, condition, or dental concerns
         disease_keywords = [
             "disease", "condition", "infection", "cancer", "tumor", "cyst", "abscess",
             "gingivitis", "periodontitis", "cavity", "decay", "erosion", "sensitivity",
@@ -695,14 +737,14 @@ Respond with only: YES or NO
         
         # Check if query contains disease/condition keywords
         question_lower = user_question.lower()
-        has_health_concern = any(keyword in question_lower for keyword in disease_keywords)
+        has_dental_concern = any(keyword in question_lower for keyword in disease_keywords)
         
         # Check if consultation info is already in response
         has_consultation_info = "(425) 775-5162" in response_content or "Dr. Meenakshi Tomar" in response_content
         
         # Add consultation recommendation if needed
-        if has_health_concern and not has_consultation_info:
-            consultation_text = "\n\nFor proper diagnosis and personalized treatment, I recommend consulting with Dr. Meenakshi Tomar directly. You can reach us at (425) 775-5162 to schedule an appointment."
+        if has_dental_concern and not has_consultation_info:
+            consultation_text = "\n\nFor proper diagnosis of dental issues and personalized treatment plan, we strongly recommend you schedule a consultation with Dr. Meenakshi Tomar by reaching us at (425) 775-5162."
             response_content += consultation_text
         
         return response_content

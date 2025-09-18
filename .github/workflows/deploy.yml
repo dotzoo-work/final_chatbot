@@ -1,16 +1,16 @@
-name: Deploy Application Docker Image to EC2 instance
+name: CI/CD Deploy Backend to EC2 Docker
 
 on:
   push:
     branches: [main]
-    paths: [ 'backend/**' ]
+    paths: ['backend/**']
 
 jobs:
   Continuous-Integration:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -42,23 +42,18 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPO }}
         run: |
           cd backend
-          # Generate unique tag (timestamp + git SHA)
           IMAGE_TAG=$(date +%Y%m%d%H%M%S)-$(git rev-parse --short HEAD)
-          
-          # Build with no cache and tag with unique + latest
           docker build --no-cache -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          
-          # Push both tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-          
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   Continuous-Deployment:
     needs: Continuous-Integration
     runs-on: self-hosted
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Configure AWS credentials
@@ -72,18 +67,26 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Stop existing container
+      - name: Stop and force remove existing container
         run: |
-          docker stop dental-chatbot || true
-          docker rm dental-chatbot || true
+          CONTAINER_ID=$(docker ps -aq -f name=dental-chatbot)
+          if [ ! -z "$CONTAINER_ID" ]; then
+            echo "Stopping existing container..."
+            docker stop -t 30 $CONTAINER_ID || true
+            echo "Force removing existing container..."
+            docker rm -f $CONTAINER_ID || true
+          else
+            echo "No existing container found."
+          fi
 
       - name: Pull latest image
         run: |
-          docker pull "${{ steps.login-ecr.outputs.registry }}"/"${{ secrets.ECR_REPO }}":latest
+          docker pull "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO }}:latest"
 
-      - name: Run Docker Image to serve users
+      - name: Run Docker Image (fresh container)
         run: |
           docker run -d --name dental-chatbot \
+            --restart unless-stopped \
             -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
             -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
             -e AWS_DEFAULT_REGION="${{ secrets.AWS_DEFAULT_REGION }}" \
@@ -99,4 +102,13 @@ jobs:
             -e ENVIRONMENT="production" \
             -e PORT="8000" \
             -p 8000:8000 \
-            "${{ steps.login-ecr.outputs.registry }}"/"${{ secrets.ECR_REPO }}":latest
+            "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO }}:latest"
+
+      - name: Prune old Docker images on EC2
+        run: |
+          echo "Pruning unused Docker images..."
+          docker image prune -af
+
+      - name: Debug SendGrid Key inside container (optional)
+        run: |
+          docker exec dental-chatbot printenv SENDGRID_API_KEY | od -c
