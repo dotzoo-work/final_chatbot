@@ -502,9 +502,9 @@ Categories:
 - DIAGNOSIS: Questions about symptoms, pain, problems, "what's wrong", identifying conditions
 - TREATMENT: Questions about fixing problems, treatment options, procedures, "how to treat"
 - PREVENTION: Questions about preventing problems, oral hygiene, care tips, maintenance
-- EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling
+- EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling, "emergency appointment", "need to see doctor today", "urgent care", "emergency"
 - PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
-- SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open"
+- SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open", "when do you open next", "next appointment", "when are you open next"
 - COST: Questions about pricing, fees, insurance, "how much does it cost"
 - GENERAL: Simple definitions, basic information, general dental questions
 

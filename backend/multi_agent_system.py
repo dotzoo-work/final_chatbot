@@ -258,6 +258,260 @@ GENERAL CONSULTATION SPECIALIZATION:
         confidence = max(0.1, min(1.0, base_confidence - attempt_penalty))
         return confidence
 
+class GeneralAgent(BaseAgent):
+    """General consultation agent with real-time availability"""
+    
+    def __init__(self, openai_client):
+        super().__init__(openai_client, AgentType.GENERAL)
+        
+    def get_current_time_info(self) -> Dict[str, str]:
+        """Get current time information for Edmonds, Washington"""
+        from datetime import datetime, timedelta
+        import pytz
+        
+        # Edmonds, Washington timezone
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        now = datetime.now(pacific_tz)
+        
+        return {
+            'current_time': now.strftime('%I:%M %p'),
+            'current_date': now.strftime('%A, %B %d, %Y'),
+            'current_day': now.strftime('%A'),
+            'timezone': 'Pacific Time (America/Los_Angeles)'
+        }
+    
+    def check_office_status(self, day: str) -> Dict[str, any]:
+        """Check if office is open on given day"""
+        open_days = {'Monday', 'Tuesday', 'Thursday'}
+        is_open = day in open_days
+        
+        return {
+            'is_open': is_open,
+            'hours': '7:00 AM - 6:00 PM' if is_open else 'Closed',
+            'day': day
+        }
+    
+    def process_general_query(self, user_question: str, context: str = "", conversation_history: str = "") -> AgentResponse:
+        """Process general queries with real-time availability context"""
+        
+        # Get current time info
+        time_info = self.get_current_time_info()
+        current_day_status = self.check_office_status(time_info['current_day'])
+        
+        # Add real-time context to the prompt
+        specialist_persona = self.get_specialist_persona()
+        
+        # Add current office status to context
+        realtime_context = f"""
+CURRENT OFFICE STATUS:
+- Today: {time_info['current_day']} ({'OPEN until 6 PM' if current_day_status['is_open'] else 'CLOSED'})
+- Time: {time_info['current_time']}
+- Phone: (425) 775-5162
+
+If mentioning appointments or office availability, use this real-time information.
+"""
+        
+        cot_prompt = self.cot_prompts.get_chain_of_thought_prompt(
+            QueryType.GENERAL, user_question, context + realtime_context, conversation_history
+        )
+        
+        # Combine specialist persona with chain-of-thought prompt
+        full_prompt = f"{specialist_persona}\n\n{cot_prompt}"
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": full_prompt}],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            initial_response = response.choices[0].message.content
+            
+            # Clean initial response first
+            initial_response = self._remove_meta_commentary(initial_response)
+            
+            # Improve response through reprompting
+            final_response, attempts, quality_scores = self.reprompting_system.improve_response_with_reprompting(
+                full_prompt, user_question, initial_response, context
+            )
+            
+            # Extract reasoning steps (simplified)
+            reasoning_steps = self._extract_reasoning_steps(final_response)
+            
+            # Calculate confidence based on quality scores
+            confidence = self._calculate_confidence(quality_scores)
+            
+            return AgentResponse(
+                content=final_response,
+                confidence=confidence,
+                agent_type=self.agent_type,
+                reasoning_steps=reasoning_steps,
+                quality_score=quality_scores[-1].overall_score if quality_scores and len(quality_scores) > 0 else 0,
+                attempts_used=attempts
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in general agent: {e}")
+            return AgentResponse(
+                content="I apologize, but I'm having difficulty processing your question right now. Please try again or consider calling our office at (425) 775-5162.",
+                confidence=0.0,
+                agent_type=self.agent_type,
+                reasoning_steps=[],
+                quality_score=0.0,
+                attempts_used=1
+            )
+
+class EmergencyAgent(BaseAgent):
+    """Specialized agent for dental emergencies with real-time availability"""
+    
+    def __init__(self, openai_client):
+        super().__init__(openai_client, AgentType.EMERGENCY)
+        
+    def get_current_time_info(self) -> Dict[str, str]:
+        """Get current time information for Edmonds, Washington"""
+        from datetime import datetime, timedelta
+        import pytz
+        
+        # Edmonds, Washington timezone
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        now = datetime.now(pacific_tz)
+        
+        return {
+            'current_time': now.strftime('%I:%M %p'),
+            'current_date': now.strftime('%A, %B %d, %Y'),
+            'current_day': now.strftime('%A'),
+            'timezone': 'Pacific Time (America/Los_Angeles)'
+        }
+    
+    def check_office_status(self, day: str) -> Dict[str, any]:
+        """Check if office is open on given day"""
+        open_days = {'Monday', 'Tuesday', 'Thursday'}
+        is_open = day in open_days
+        
+        return {
+            'is_open': is_open,
+            'hours': '7:00 AM - 6:00 PM' if is_open else 'Closed',
+            'day': day
+        }
+    
+    def get_tomorrow_day(self) -> str:
+        """Get tomorrow's day name"""
+        from datetime import datetime, timedelta
+        import pytz
+        
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        tomorrow = datetime.now(pacific_tz) + timedelta(days=1)
+        return tomorrow.strftime('%A')
+    
+    def process_emergency_query(self, user_question: str, context: str = "") -> AgentResponse:
+        """Process emergency queries with real-time availability"""
+        
+        # Get current time info
+        time_info = self.get_current_time_info()
+        current_day_status = self.check_office_status(time_info['current_day'])
+        
+        # Debug logging
+        logger.info(f"🚨 Emergency Request - Day: {time_info['current_day']}, Status: {'OPEN' if current_day_status['is_open'] else 'CLOSED'}")
+        logger.info(f"🚨 Emergency Request - Time: {time_info['current_time']}")
+        logger.info(f"🚨 Emergency Request - Question: {user_question}")
+        
+        # Check if user is asking about tomorrow or next
+        is_future_request = any(word in user_question.lower() for word in ['tomorrow', 'next'])
+        
+        if is_future_request:
+            # Get tomorrow's info
+            tomorrow_day = self.get_tomorrow_day()
+            tomorrow_day_status = self.check_office_status(tomorrow_day)
+            
+            if tomorrow_day_status['is_open']:
+                emergency_response = f"""Yes, Dr. Tomar can see you for an emergency appointment tomorrow ({tomorrow_day}).
+
+**Tomorrow's Emergency Availability:**
+• Day: {tomorrow_day}
+• Hours: 7 AM - 6 PM
+• Call: (425) 775-5162 to schedule emergency appointment
+• Location: Edmonds Bay Dental, Edmonds, WA
+
+Please call to discuss your emergency and schedule tomorrow's appointment."""
+            else:
+                emergency_response = f"""Dr. Tomar's office is closed tomorrow ({tomorrow_day}), but emergency care is important.
+
+**Emergency Options:**
+• Call: (425) 775-5162 - Leave emergency message
+• Next Open: Monday, Tuesday, or Thursday (7 AM - 6 PM)
+• Severe Cases: Consider hospital emergency room
+
+For immediate pain relief:
+• Over-the-counter pain medication as directed
+• Cold compress for swelling
+• Avoid very hot/cold foods"""
+        else:
+            # Today's emergency request
+            if current_day_status['is_open']:
+                emergency_response = f"""Dr. Tomar's office is currently open and available for emergency appointments until 6 PM today.
+
+**Immediate Action:**
+• Call now: (425) 775-5162
+• Status: Open until 6 PM today ({time_info['current_day']})
+• Location: Edmonds Bay Dental, Edmonds, WA
+
+Please call immediately to discuss your emergency with Dr. Tomar's team."""
+            else:
+                emergency_response = f"""Dr. Tomar's office is currently closed, but emergency care is important.
+
+**Emergency Options:**
+• Call: (425) 775-5162 - Leave emergency message
+• Next Open: Monday, Tuesday, or Thursday (7 AM - 6 PM)
+• Severe Cases: Consider hospital emergency room
+
+For immediate pain relief:
+• Over-the-counter pain medication as directed
+• Cold compress for swelling
+• Avoid very hot/cold foods"""
+        
+        emergency_prompt = f"""
+You are Dr. Tomar's emergency virtual assistant. Respond to this emergency request:
+
+User Emergency: "{user_question}"
+
+Provide this exact response:
+{emergency_response}
+"""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": emergency_prompt}],
+                temperature=0.0,
+                max_tokens=400
+            )
+            
+            content = response.choices[0].message.content
+            
+            return AgentResponse(
+                content=content,
+                confidence=0.95,
+                agent_type=AgentType.EMERGENCY,
+                reasoning_steps=[
+                    f"Emergency request detected",
+                    f"Current status: {time_info['current_day']} - {'Open' if current_day_status['is_open'] else 'Closed'}",
+                    "Generated emergency response with real-time availability"
+                ],
+                quality_score=95.0,
+                attempts_used=1
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in emergency agent: {e}")
+            return AgentResponse(
+                content="This is a dental emergency. Please call Dr. Tomar's office immediately at (425) 775-5162 for urgent care.",
+                confidence=0.8,
+                agent_type=AgentType.EMERGENCY,
+                reasoning_steps=["Fallback emergency response"],
+                quality_score=80.0,
+                attempts_used=1
+            )
+
 class SchedulingAgent(BaseAgent):
     """Specialized agent for appointment scheduling and office hours"""
     
@@ -323,6 +577,7 @@ Intent Categories:
 - same_day_request: User asking about same-day appointments or availability today
 - see_me_request: User asking "can you see me" or when they can be seen (includes TODAY or TOMORROW)
 - hours_inquiry: User asking about office hours, opening times, or when clinic is open
+- next_open_request: User asking "when do you open next", "when are you open next", "next time you're open"
 - modify_appointment: User wants to cancel, reschedule, or change existing appointment
 - cost_inquiry: User asking about prices, costs, or fees for procedures
 - insurance_inquiry: User asking about insurance acceptance or coverage
@@ -343,7 +598,7 @@ Return only the intent category name:
             
             # Validate intent
             valid_intents = ["schedule_request", "same_day_request", "see_me_request", 
-                           "hours_inquiry", "modify_appointment", "cost_inquiry", 
+                           "hours_inquiry", "next_open_request", "modify_appointment", "cost_inquiry", 
                            "insurance_inquiry", "general_scheduling"]
             
             return intent if intent in valid_intents else "general_scheduling"
@@ -500,6 +755,39 @@ IMPORTANT:
 User: "{user_question}"
 """,
             
+            "next_open_request": f"""
+{context}
+User asking "when do you open next" - determine next open day:
+
+CURRENT DAY STATUS: {time_info['current_day']} - {'OPEN' if current_day_status['is_open'] else 'CLOSED'}
+TOMORROW STATUS: {time_info['tomorrow_day']} - {'OPEN' if tomorrow_day_status['is_open'] else 'CLOSED'}
+
+If TOMORROW IS OPEN:
+Dr. Tomar's office opens tomorrow ({time_info['tomorrow_day']}) at 7 AM.
+
+**Tomorrow's Schedule:**
+• Day: {time_info['tomorrow_day']}
+• Hours: 7 AM to 6 PM
+• Contact: (425) 775-5162 for appointments
+
+If TOMORROW IS CLOSED:
+Dr. Tomar's office is closed tomorrow ({time_info['tomorrow_day']}).
+
+**Next Open Day:**
+• Monday: 7 AM - 6 PM
+• Tuesday: 7 AM - 6 PM  
+• Thursday: 7 AM - 6 PM
+• Contact: (425) 775-5162 for appointments
+
+IMPORTANT: 
+1. Check TOMORROW STATUS to determine if tomorrow is open or closed
+2. If tomorrow is open, say "opens tomorrow at 7 AM"
+3. If tomorrow is closed, show next available days
+4. Each bullet point must be on a separate line with proper spacing
+
+User: "{user_question}"
+""",
+            
             "modify_appointment": f"""
 {context}
 User wants to cancel/reschedule. Check current day status first:
@@ -650,9 +938,9 @@ class MultiAgentOrchestrator:
             AgentType.DIAGNOSTIC.value: BaseAgent(openai_client, AgentType.DIAGNOSTIC),
             AgentType.TREATMENT.value: BaseAgent(openai_client, AgentType.TREATMENT),
             AgentType.PREVENTION.value: BaseAgent(openai_client, AgentType.PREVENTION),
-            AgentType.EMERGENCY.value: BaseAgent(openai_client, AgentType.EMERGENCY),
+            AgentType.EMERGENCY: EmergencyAgent(openai_client),
             AgentType.SCHEDULING: SchedulingAgent(openai_client),
-            AgentType.GENERAL.value: BaseAgent(openai_client, AgentType.GENERAL)
+            AgentType.GENERAL: GeneralAgent(openai_client)
         }
         
         # Monitoring disabled for compatibility
@@ -670,8 +958,16 @@ class MultiAgentOrchestrator:
         if query_type == QueryType.SCHEDULING:
             return self.agents[AgentType.SCHEDULING].process_scheduling_query(user_question, context)
         
+        # Route to emergency agent if classified as emergency
+        if query_type == QueryType.EMERGENCY:
+            return self.agents[AgentType.EMERGENCY].process_emergency_query(user_question, context)
+        
+        # Route to general agent if classified as general
+        if query_type == QueryType.GENERAL:
+            return self.agents[AgentType.GENERAL].process_general_query(user_question, context)
+        
         # Route to appropriate agent
-        agent = self.agents.get(query_type.value, self.agents[AgentType.GENERAL.value])
+        agent = self.agents.get(query_type.value, self.agents[AgentType.GENERAL])
         
         # Get relevant context from RAG if needed
         if context:
@@ -766,7 +1062,7 @@ class MultiAgentOrchestrator:
         
         # Secondary agent (general consultation for broader perspective)
         if primary_response.agent_type != AgentType.GENERAL:
-            secondary_response = self.agents[AgentType.GENERAL.value].process_query(user_question, context)
+            secondary_response = self.agents[AgentType.GENERAL].process_general_query(user_question, context)
             agent_responses.append(secondary_response)
         
         # Select best response based on quality and confidence
