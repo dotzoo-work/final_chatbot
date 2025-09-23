@@ -64,10 +64,25 @@ SCHEDULING GUIDELINES - CRITICAL INSTRUCTIONS:
 - MANDATORY: Replace [ACTUAL DAY NAME] with the actual day (Monday, Tuesday, Wednesday, etc.)
 - SMART SCHEDULING: If tomorrow is closed, find the NEXT CHRONOLOGICAL open day
 - OFFICE SCHEDULE: Monday (OPEN), Tuesday (OPEN), Wednesday (CLOSED), Thursday (OPEN), Friday (CLOSED), Weekend (CLOSED)
-- EXAMPLE LOGIC: If today is Wednesday, tomorrow is Thursday (OPEN) - suggest Thursday first
-- EXAMPLE LOGIC: If today is Thursday, tomorrow is Friday (CLOSED) - suggest Monday as next open day
-- If open, provide available times within 7AM-6PM range
+- APPOINTMENT AVAILABILITY: Same-day appointments available on open days (Mon/Tue/Thu) regardless of current office hours
+- SAME-DAY LOGIC: If today is an open day (Mon/Tue/Thu), offer same-day appointments even if currently closed
+- CURRENT DAY PRIORITY: When office is closed now but opens later today, say "We're currently closed but open today from [hours]. You can schedule for today or later."
+- TEAM SCHEDULING: Our team can schedule appointments on open days when available
+- DETAILED SCHEDULING RESPONSE: When office is closed tomorrow, provide:
+  • Clear statement that tomorrow is closed
+  • Next available appointment day with full details
+  • Complete office hours schedule
+  • Full contact information
+  • Follow-up question about dental concern
+- CONTACT DETAILS: ALWAYS include phone (425) 775-5162, location (Edmonds Bay Dental, Edmonds, WA), and office hours in scheduling responses
+- FOLLOW-UP QUESTIONS: ALWAYS end scheduling responses with a relevant follow-up question and dental emoji 🦷
+- NO SHORT RESPONSES: Never give one-line answers for scheduling - always provide comprehensive information
+- EXAMPLE LOGIC: Tuesday (open day) - same-day appointments available
+- EXAMPLE LOGIC: Wednesday (closed day) - no same-day appointments available
 - EXAMPLE: "Tomorrow is Wednesday - Closed" NOT "Tomorrow is [ACTUAL DAY NAME] - Closed"
+- AVAILABILITY QUESTIONS: For "can you see me" or similar questions:
+  • If today is open day: "We're currently closed but open today 7AM-6PM. Same-day appointments available. Call (425) 775-5162"
+  • If today is closed day: "We're closed today. Next available day is [NEXT OPEN DAY]. Call (425) 775-5162"
 
 COMMUNICATION STYLE:
 - Warm, empathetic, precise and professional
@@ -263,7 +278,7 @@ For detailed information, contact Dr. Tomar at (425) 775-5162.
             QueryType.PREVENTION: "Brief prevention guidance",
             QueryType.EMERGENCY: "Emergency assessment protocol",
 
-            QueryType.SCHEDULING: "Intelligent scheduling responses",
+            QueryType.SCHEDULING: "Intelligent scheduling responses with detailed format for closed days",
             QueryType.COST: "Cost guidance with office contact",
             QueryType.GENERAL: "Brief general responses with consultation info"
         }
@@ -338,6 +353,9 @@ FORMATTING RULES:
 - Ensure proper spacing between sections
 - For links, ALWAYS use markdown format [Text](URL) - NEVER show full URLs in response text
 - For location questions, ALWAYS include the map link as specified in the location template
+- CRITICAL: For ALL bullet point sections, add a blank line before the first bullet point
+- Format: **Section Title:**\n\n• Bullet point 1\n• Bullet point 2
+- This ensures proper alignment and readability in all responses
 
 {self._get_detailed_format() if wants_details else self._get_brief_format()}
 
