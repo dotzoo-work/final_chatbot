@@ -1005,6 +1005,18 @@ User: "{user_question}"
     def process_scheduling_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Process scheduling-specific queries with intent-based responses"""
         
+        # Check for location questions first
+        location_keywords = ['another location', 'second location', 'other location', 'do you have another', 'other locations']
+        if any(keyword in user_question.lower() for keyword in location_keywords):
+            return AgentResponse(
+                content="Yes, Dr. Tomar has a second location:\n\n**Pacific Highway Dental**\n\n27020 Pacific Highway South, Suite C\nKent, WA 98032\nPhone: (253) 529-9434\n\nYou can contact them for appointments and inquiries.",
+                confidence=1.0,
+                agent_type=AgentType.SCHEDULING,
+                reasoning_steps=["Detected location question", "Provided Pacific Highway Dental information with complete address"],
+                quality_score=100.0,
+                attempts_used=1
+            )
+        
         # Get current time info
         time_info = self.get_current_time_info()
         current_day_status = check_office_status(time_info['current_day'])

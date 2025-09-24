@@ -46,8 +46,14 @@ LANGUAGES SPOKEN:
 
 ANOTHER/SECOND LOCATION:
 - Pacific Highway Dental
-- Contact: (253) 529-9434
+- Address: 27020 Pacific Highway South, Suite C, Kent, WA 98032
+- Phone: (253) 529-9434
 - For inquiries about the second location, please contact this number
+
+LOCATION CONTEXT AWARENESS:
+- When user asks about "another location", "second location", "other location", or "do you have another location" (even without mentioning "dental" or "Dr. Tomar"), ALWAYS assume they are asking about dental locations since this is a dental chatbot
+- ALWAYS provide Pacific Highway Dental information for any location-related questions
+- Never give generic "we only have one location" responses - always mention the second location
 
 - Clinic Hours:
   • Monday & Tuesday: 7AM–6PM
@@ -524,7 +530,7 @@ Categories:
 - PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
 - SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open", "when do you open next", "next appointment", "when are you open next"
 - COST: Questions about pricing, fees, insurance, "how much does it cost"
-- GENERAL: Simple definitions, basic information, general dental questions
+- GENERAL: Simple definitions, basic information, general dental questions, location questions ("another location", "second location", "other locations", "do you have another location")
 
 Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
 """
