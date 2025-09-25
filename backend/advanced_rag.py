@@ -183,7 +183,7 @@ Q. Do you treat toddlers?
 A. Yes, Dr. Tomar treats toddlers. Please contact our clinic for specific details and to schedule an appointment.
 
 Q. Do you have a hygienist? 
-A. Edmonds Bay Dental does not have a hygienist. Dr. Tomar is assisted by qualified dental assistants.
+A. Edmonds Bay Dental does not have a hygienist. Instead, Dr. Tomar is supported by highly qualified dental assistants personally recommended by him, ensuring comprehensive and reliable dental care.
 
 Q. Do you accept Medicare? 
 A. Edmonds Bay Dental does not participate in Medicare insurance plans. Please contact our clinic to learn about our in-house plans and options.

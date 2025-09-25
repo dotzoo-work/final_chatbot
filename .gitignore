@@ -32,4 +32,4 @@ backend/conversation_memory/
 backend/.env
 backend/temp/
 backend/test_mongodb.py
-backend/.venv/
+#backend/.venv/

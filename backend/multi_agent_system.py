@@ -584,6 +584,24 @@ class SchedulingAgent(BaseAgent):
         
         return 'Monday'  # fallback
     
+    def is_after_office_hours(self) -> bool:
+        """Check if current time is after 6 PM"""
+        from datetime import datetime
+        import pytz
+        
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        now = datetime.now(pacific_tz)
+        return now.hour >= 18  # 6 PM or later
+    
+    def is_before_office_hours(self) -> bool:
+        """Check if current time is before 7 AM"""
+        from datetime import datetime
+        import pytz
+        
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        now = datetime.now(pacific_tz)
+        return now.hour < 7  # Before 7 AM
+    
     def generate_closed_day_response(self, tomorrow_day: str, next_open_day: str) -> str:
         """Generate detailed response when office is closed tomorrow"""
         return f"""Dr. Meenakshi Tomar's office is closed tomorrow ({tomorrow_day}). However, the next available appointment day is {next_open_day}.
@@ -724,7 +742,7 @@ If {time_info['current_day']} NOT in ['Monday', 'Tuesday', 'Thursday']:
 • Available: 7 AM to 6 PM, Mon, Tue, and Thu
 
 If {time_info['current_day']} in ['Monday', 'Tuesday', 'Thursday'] AND current_day_status['is_open'] is False:
-We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM. Please call the Scheduling Team to check if same-day appointments are available.
+We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.I’m unable to schedule your appointment directly, Please call the Scheduling Team to check availability of appointments.
 
 **Contact Information:**
 • please call us at : (425) 775-5162
@@ -756,8 +774,27 @@ I’m unable to schedule your appointment directly, but our Scheduling Team can 
 
 **Today's Availability:**
 
-• Status: {current_day_status['status_message']}
+Check current status:
+If current_day_status['is_open'] is True:
+• Status: Open until 6 PM
 • please call us at : (425) 775-5162 to schedule your appointment
+
+If current_day_status['is_open'] is False:
+
+If {self.is_after_office_hours()}:
+Same-day appointments are no longer available today. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
+
+**Next Available:**
+• Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
+• Phone: (425) 775-5162
+
+Elif {self.is_before_office_hours()}:
+We're currently closed but will open today at 7 AM to 6 PM for Same-day appointments.
+
+**Today's Hours:**
+• Opens: 7 AM today
+• Closes: 6 PM today
+• Phone: (425) 775-5162
 
 Step 2: Check if today ({time_info['current_day']}) is NOT an open day (Wed/Fri/Sat/Sun):
 
@@ -797,41 +834,47 @@ Dr. Tomar's office is closed today ({time_info['current_day']}). Our next availa
 
 **Please Call Us:** (425) 775-5162 for appointments
 
+CRITICAL: NEVER use this response for Thursday! Thursday is an OPEN day, not closed day!
 IMPORTANT: Only use this response if today is actually a closed day (Wed/Fri/Sat/Sun), NOT for open days like Monday/Tuesday/Thursday.
 
+CRITICAL: Check current status first!
+
 If today ({time_info['current_day']}) is an open day (Mon/Tue/Thu):
-- If current_day_status['is_open'] is True: "Yes! Dr. Tomar can see you today. We are open until 6 PM. Please call (425) 775-5162 to schedule."
-- If current_day_status['is_open'] is False:
-  - Check current time: if before 7 AM, say "We're currently closed but open today from 7 AM to 6 PM"
-  - Check current time: if after 6 PM, say "We're currently closed. Next open day is {self.get_next_open_day(time_info['current_day'])}"
 
-For BEFORE business hours (currently closed but open today):
-We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM. Same-day appointments are available.
+Step A: If currently OPEN (current_day_status['is_open'] is True):
+Yes! Dr. Tomar can see you today. We are open until 6 PM. Please call (425) 775-5162 to schedule Appointment.
 
-**Contact Information:**
+Step B: If currently CLOSED (current_day_status['is_open'] is False):
 
-- Phone: (425) 775-5162
-- Location: Edmonds Bay Dental, Edmonds, WA
+Check if after office hours:
+If {self.is_after_office_hours()}:
+We're currently closed. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
 
-Please call to check availability - if available, our team can schedule your appointment.
+**Next Available:**
+• Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
+• Hours: 7 AM - 6 PM
+• Phone: (425) 775-5162
 
-{get_dynamic_followup_question()}
-
-For AFTER business hours (currently closed, next day):
-We're currently closed. Our next open day is {self.get_next_open_day(time_info['current_day'])} from 7 AM to 6 PM.
+Else (before office hours):
+We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.
 
 **Contact Information:**
+• Phone: (425) 775-5162
+• Location: Edmonds Bay Dental, Edmonds, WA
 
-- Phone: (425) 775-5162
-- Location: Edmonds Bay Dental, Edmonds, WA
-
-{get_dynamic_followup_question()}
+IMPORTANT: ALWAYS check current_day_status['is_open'] first! Don't assume office is open just because it's an open day!
 
 For TOMORROW/NEXT requests ("can you see me tomorrow" or "can you see me next"):
 
-CRITICAL: Check if tomorrow ({time_info['tomorrow_day']}) is in open days [Monday, Tuesday, Thursday]
+CRITICAL RULES FOR TOMORROW:
+- NEVER say Friday is open - Friday is ALWAYS CLOSED!
+- NEVER say Wednesday is open - Wednesday is ALWAYS CLOSED!
+- NEVER say Saturday/Sunday is open - Weekend is ALWAYS CLOSED!
+- ONLY Monday, Tuesday, Thursday are open days!
 
-If {time_info['tomorrow_day']} in ['Monday', 'Tuesday', 'Thursday']:
+Step 1: Check if tomorrow ({time_info['tomorrow_day']}) is an OPEN day
+
+IF TOMORROW IS MONDAY, TUESDAY, OR THURSDAY:
 Yes! Dr. Tomar can see you tomorrow ({time_info['tomorrow_day']}).
 
 **Tomorrow's Availability:**
@@ -841,8 +884,10 @@ Yes! Dr. Tomar can see you tomorrow ({time_info['tomorrow_day']}).
 
 What type of dental concern would you like to address during your visit? 🦷
 
-If {time_info['tomorrow_day']} NOT in ['Monday', 'Tuesday', 'Thursday']:
+IF TOMORROW IS WEDNESDAY, FRIDAY, SATURDAY, OR SUNDAY:
 {self.generate_closed_day_response(time_info['tomorrow_day'], self.get_next_open_day(time_info['tomorrow_day']))}
+
+REMEMBER: Friday is CLOSED! Never say we can see you on Friday!
 
 User Question: "{user_question}"
 """,
@@ -893,33 +938,65 @@ User: "{user_question}"
 You are Dr. Tomar's scheduling assistant. User is asking "when do you open next".
 
 CURRENT STATUS:
-- Today: {time_info['current_day']}
+- Today: {time_info['current_day']} ({'OPEN' if current_day_status['is_open'] else 'CLOSED'})
 - Tomorrow: {time_info['tomorrow_day']}
-- Open Days: Monday, Tuesday, Thursday only
+- Current Time: {time_info['current_time']}
+- Open Days: Monday, Tuesday, Thursday ONLY
+- Closed Days: Wednesday, Friday, Saturday, Sunday
 
-IMPORTANT: ALWAYS include the complete office hours section exactly as shown below.
+CRITICAL RULES:
+- NEVER say Friday is open - Friday is ALWAYS CLOSED
+- NEVER say Wednesday is open - Wednesday is ALWAYS CLOSED  
+- NEVER say Saturday/Sunday is open - Weekend is ALWAYS CLOSED
+- ONLY Monday, Tuesday, Thursday are open days
 
-For TOMORROW OPEN:
-Dr. Tomar's office opens tomorrow ({time_info['tomorrow_day']}) at 7 AM.
+CRITICAL LOGIC - Follow this exactly:
+
+Step 1: Check if we are currently open TODAY
+If today ({time_info['current_day']}) is an open day AND current_day_status['is_open'] is True:
+We are open right now until 6 PM today!
+
+**Current Status:**
+• Open until: 6 PM today
+• Phone: (425) 775-5162
+• Location: Edmonds Bay Dental, Edmonds, WA
+
+Step 2: If today is an open day but currently closed:
+If today ({time_info['current_day']}) is an open day (Monday/Tuesday/Thursday) AND current_day_status['is_open'] is False:
+
+Check current time:
+- If before 7 AM: We're currently closed but open today from 7 AM to 6 PM.
+- If after 6 PM: We're closed for today, next opening below.
+
+For BEFORE 7 AM (currently closed but opening today):
+We're currently closed but open today from 7 AM to 6 PM.
+
+**Today's Hours:**
+• Opens: 7 AM today
+• Closes: 6 PM today
+• Phone: (425) 775-5162
+
+For AFTER 6 PM (closed for today, show next opening):
+We're currently closed for today. Next opening information below.
+
+Step 3: If currently closed and need next opening:
+Check tomorrow ({time_info['tomorrow_day']}):
+
+IF TOMORROW IS MONDAY, TUESDAY, OR THURSDAY:
+We open next tomorrow ({time_info['tomorrow_day']}) at 7 AM.
+
+IF TOMORROW IS WEDNESDAY, FRIDAY, SATURDAY, OR SUNDAY:
+We are closed tomorrow ({time_info['tomorrow_day']}). We open next on {self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
 
 **Office Hours:**
 • Monday: 7 AM - 6 PM
 • Tuesday: 7 AM - 6 PM
 • Thursday: 7 AM - 6 PM
-• Wednesday, Friday, Weekend: Closed
+• Wednesday, Friday, Weekend: CLOSED
 
 **Contact:** (425) 775-5162 for appointments
 
-For TOMORROW CLOSED:
-Dr. Tomar's office is closed tomorrow ({time_info['tomorrow_day']}). The next open day is {self.get_next_open_day(time_info['tomorrow_day'])}.
-
-**Office Hours:**
-• Monday: 7 AM - 6 PM
-• Tuesday: 7 AM - 6 PM
-• Thursday: 7 AM - 6 PM
-• Wednesday, Friday, Weekend: Closed
-
-**Contact:** (425) 775-5162 for appointments
+REMEMBER: Friday is CLOSED! Never say we open on Friday!
 
 User Question: "{user_question}"
 """,
@@ -1041,7 +1118,7 @@ User: "{user_question}"
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": scheduling_prompt}],
-                temperature=0.1,
+                temperature=0.0,
                 max_tokens=400
             )
             
