@@ -829,10 +829,9 @@ We're currently closed. Our next open day is {self.get_next_open_day(time_info['
 
 For TOMORROW/NEXT requests ("can you see me tomorrow" or "can you see me next"):
 
-If tomorrow ({time_info['tomorrow_day']}) is closed:
-{self.generate_closed_day_response(time_info['tomorrow_day'], self.get_next_open_day(time_info['tomorrow_day']))}
+CRITICAL: Check if tomorrow ({time_info['tomorrow_day']}) is in open days [Monday, Tuesday, Thursday]
 
-If tomorrow ({time_info['tomorrow_day']}) is open:
+If {time_info['tomorrow_day']} in ['Monday', 'Tuesday', 'Thursday']:
 Yes! Dr. Tomar can see you tomorrow ({time_info['tomorrow_day']}).
 
 **Tomorrow's Availability:**
@@ -841,6 +840,9 @@ Yes! Dr. Tomar can see you tomorrow ({time_info['tomorrow_day']}).
 • Contact: (425) 775-5162 to schedule your appointment
 
 What type of dental concern would you like to address during your visit? 🦷
+
+If {time_info['tomorrow_day']} NOT in ['Monday', 'Tuesday', 'Thursday']:
+{self.generate_closed_day_response(time_info['tomorrow_day'], self.get_next_open_day(time_info['tomorrow_day']))}
 
 User Question: "{user_question}"
 """,
