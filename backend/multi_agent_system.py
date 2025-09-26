@@ -617,6 +617,42 @@ Please give us a call at (425) 775-5162.
 
 {get_dynamic_followup_question()}"""
     
+    def get_direct_response(self, intent: str, time_info: Dict, current_day_status: Dict, tomorrow_day_status: Dict, user_question: str) -> str:
+        """Generate direct response without AI interpretation"""
+        
+        if intent == "see_me_request":
+            # Check if today is an open day
+            if time_info['current_day'] in ['Monday', 'Tuesday', 'Thursday']:
+                if current_day_status['is_open']:
+                    return "Yes! Dr. Tomar can see you today. We are open until 6 PM. Please call (425) 775-5162 to schedule your appointment."
+                else:
+                    # Check time conditions
+                    if self.is_after_office_hours():
+                        next_day = time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])
+                        return f"We're currently closed. Next opening is {next_day} at 7 AM.\n\n**Next Available:**\n• Day: {next_day}\n• Hours: 7 AM - 6 PM\n• Phone: (425) 775-5162"
+                    elif self.is_before_office_hours():
+                        return f"We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.\n\n**Contact Information:**\n• Phone: (425) 775-5162\n• Location: Edmonds Bay Dental, Edmonds, WA"
+            else:
+                next_day = self.get_next_open_day(time_info['current_day'])
+                return f"Dr. Tomar's office is closed today ({time_info['current_day']}). Our next available day is {next_day}.\n\n**Office Hours:**\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
+        
+        elif intent == "same_day_request":
+            # Check if today is an open day
+            if time_info['current_day'] in ['Monday', 'Tuesday', 'Thursday']:
+                if current_day_status['is_open']:
+                    return "Yes, we offer same-day appointments! We are currently open until 6 PM. Please call (425) 775-5162 to schedule your same-day appointment."
+                else:
+                    # Check time conditions
+                    if self.is_after_office_hours():
+                        next_day = time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])
+                        return f"Same-day appointments are no longer available today. Next opening is {next_day} at 7 AM.\n\n**Next Available:**\n• Day: {next_day}\n• Phone: (425) 775-5162"
+                    elif self.is_before_office_hours():
+                        return f"We're currently closed but will open today at 7 AM to 6 PM for same-day appointments.\n\n**Today's Hours:**\n• Opens: 7 AM today\n• Closes: 6 PM today\n• Phone: (425) 775-5162"
+            else:
+                return f"Same-day appointments are not available today as our office is closed on {time_info['current_day']}s.\n\n**Available Status:**\n• {current_day_status['status_message']}\n• Contact: (425) 775-5162 for scheduling"
+        
+        return None  # Use AI for other intents
+    
     def detect_scheduling_intent(self, user_question: str) -> str:
         """Dynamically detect scheduling intent using AI"""
         
@@ -839,14 +875,19 @@ IMPORTANT: Only use this response if today is actually a closed day (Wed/Fri/Sat
 
 CRITICAL: Check current status first!
 
-If today ({time_info['current_day']}) is an open day (Mon/Tue/Thu):
+STEP 1: Check if today ({time_info['current_day']}) is an open day (Mon/Tue/Thu)
 
-Step A: If currently OPEN (current_day_status['is_open'] is True):
+If {time_info['current_day']} in ['Monday', 'Tuesday', 'Thursday']:
+
+STEP 2: Check current office status
+
+If {current_day_status['is_open']} is True:
 Yes! Dr. Tomar can see you today. We are open until 6 PM. Please call (425) 775-5162 to schedule Appointment.
 
-Step B: If currently CLOSED (current_day_status['is_open'] is False):
+If {current_day_status['is_open']} is False:
 
-Check if after office hours:
+STEP 3: Check time of day
+
 If {self.is_after_office_hours()}:
 We're currently closed. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
 
@@ -855,7 +896,7 @@ We're currently closed. Next opening is {time_info['tomorrow_day'] if time_info[
 • Hours: 7 AM - 6 PM
 • Phone: (425) 775-5162
 
-Else (before office hours):
+If {self.is_before_office_hours()}:
 We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.
 
 **Contact Information:**
@@ -1111,13 +1152,29 @@ User: "{user_question}"
         intent = self.detect_scheduling_intent(user_question)
         logger.info(f"🎯 Detected Intent: {intent}")
         
+        # Use direct response for critical intents to ensure correct time logic
+        if intent in ["see_me_request", "same_day_request"]:
+            direct_response = self.get_direct_response(intent, time_info, current_day_status, tomorrow_day_status, user_question)
+            if direct_response:
+                return AgentResponse(
+                    content=direct_response,
+                    confidence=1.0,
+                    agent_type=AgentType.SCHEDULING,
+                    reasoning_steps=[f"Direct response for {intent}", f"After hours: {self.is_after_office_hours()}, Before hours: {self.is_before_office_hours()}"],
+                    quality_score=100.0,
+                    attempts_used=1
+                )
+        
         # Generate intent-specific prompt
         scheduling_prompt = self._get_intent_prompt(intent, time_info, current_day_status, tomorrow_day_status, user_question)
         
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": scheduling_prompt}],
+                messages=[
+                    {"role": "system", "content": "You are a scheduling assistant. Follow the template logic EXACTLY as written. Do not interpret or paraphrase. Execute the conditional statements as code."},
+                    {"role": "user", "content": scheduling_prompt}
+                ],
                 temperature=0.0,
                 max_tokens=400
             )
