@@ -621,16 +621,30 @@ Please give us a call at (425) 775-5162.
         """Generate direct response without AI interpretation"""
         
         if intent == "see_me_request":
+            # Get current time for debugging
+            from datetime import datetime
+            import pytz
+            pacific_tz = pytz.timezone('America/Los_Angeles')
+            now = datetime.now(pacific_tz)
+            current_hour = now.hour
+            
+            logger.info(f"🕐 Direct Response Debug - Current Hour: {current_hour}")
+            logger.info(f"🕐 After hours check: {self.is_after_office_hours()}")
+            logger.info(f"🕐 Before hours check: {self.is_before_office_hours()}")
+            
             # Check if today is an open day
             if time_info['current_day'] in ['Monday', 'Tuesday', 'Thursday']:
                 if current_day_status['is_open']:
                     return "Yes! Dr. Tomar can see you today. We are open until 6 PM. Please call (425) 775-5162 to schedule your appointment."
                 else:
-                    # Check time conditions
-                    if self.is_after_office_hours():
+                    # Check time conditions with explicit logic
+                    if current_hour >= 18:  # After 6 PM
                         next_day = time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])
                         return f"We're currently closed. Next opening is {next_day} at 7 AM.\n\n**Next Available:**\n• Day: {next_day}\n• Hours: 7 AM - 6 PM\n• Phone: (425) 775-5162"
-                    elif self.is_before_office_hours():
+                    elif current_hour < 7:  # Before 7 AM
+                        return f"We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.\n\n**Contact Information:**\n• Phone: (425) 775-5162\n• Location: Edmonds Bay Dental, Edmonds, WA"
+                    else:
+                        # Between 7 AM and 6 PM but office shows closed - fallback
                         return f"We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.\n\n**Contact Information:**\n• Phone: (425) 775-5162\n• Location: Edmonds Bay Dental, Edmonds, WA"
             else:
                 next_day = self.get_next_open_day(time_info['current_day'])
@@ -758,7 +772,28 @@ Tomorrow ({time_info['tomorrow_day']}) is closed. Our next available day for sch
 • Thursday: 7 AM - 6 PM
 • Wednesday, Friday, Weekend: Closed
 
-Would you like to schedule an appointment for one of our available days? 🦷
+CRITICAL: Check the current hour to decide response:
+
+CURRENT HOUR: {time_info['current_time']} (Use this to decide!)
+
+IF CURRENT HOUR >= 18 (6 PM or later):
+We're currently closed. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM. I’m unable to schedule your appointment directly,Our team can schedule your appointment when available. Please call us at (425) 775-5162 to schedule.
+
+
+**Next Available:**
+• Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
+• Hours: 7 AM - 6 PM
+• Phone: (425) 775-5162
+
+IF CURRENT HOUR < 7 (Before 7 AM):
+We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM. I’m unable to schedule your appointment directly,Our team can schedule your appointment when available. Please call us at (425) 775-5162 to schedule.
+
+
+**Contact Information:**
+• Phone: (425) 775-5162
+• Location: Edmonds Bay Dental, Edmonds, WA
+
+USE THE CURRENT HOUR VALUE ABOVE TO CHOOSE THE RIGHT RESPONSE!
 
 For TODAY requests:
 If {time_info['current_day']} in ['Monday', 'Tuesday', 'Thursday'] AND current_day_status['is_open'] is True:
@@ -888,20 +923,26 @@ If {current_day_status['is_open']} is False:
 
 STEP 3: Check time of day
 
-If {self.is_after_office_hours()}:
+CRITICAL: Check the current hour to decide response:
+
+CURRENT HOUR: 
+
+IF CURRENT HOUR >= 18 (6 PM or later):
 We're currently closed. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
 
 **Next Available:**
 • Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
-• Hours: 7 AM - 6 PM
+•  Open Hours: 7 AM - 6 PM
 • Phone: (425) 775-5162
 
-If {self.is_before_office_hours()}:
+IF CURRENT HOUR < 7 (Before 7 AM):
 We're currently closed but open today ({time_info['current_day']}) from 7 AM to 6 PM.
 
 **Contact Information:**
 • Phone: (425) 775-5162
 • Location: Edmonds Bay Dental, Edmonds, WA
+
+USE THE CURRENT HOUR VALUE ABOVE TO CHOOSE THE RIGHT RESPONSE!
 
 IMPORTANT: ALWAYS check current_day_status['is_open'] first! Don't assume office is open just because it's an open day!
 
@@ -1048,17 +1089,35 @@ User wants to cancel/reschedule.
 
 Current Status: {current_day_status['status_message']}
 
-While I am unable to make or modify appointments, our scheduling team is available to help.
+While I am unable to make cancel/reschedule appointments directly, our scheduling team is available to help.
+
+CRITICAL: Check the current hour to decide response:
+
+CURRENT HOUR: {time_info['current_time']} (Use this to decide!)
+
+IF CURRENT HOUR >= 18 (6 PM or later):
+Our office is currently closed. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.While I am unable to make Cancel/reschedule appointments, our scheduling team is available to help
+**Next Available:**
+• Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
+• Hours: 7 AM - 6 PM
+• Phone: (425) 775-5162
+
+IF CURRENT HOUR < 7 (Before 7 AM):
+Our office is currently closed but will open today ({time_info['current_day']}) from 7 AM to 6 PM.While I am unable to make cancel/reschedule appointments, our scheduling team is available to help
+**Today's Hours:**
+• Opens: 7 AM today
+• Closes: 6 PM today
+• Phone: (425) 775-5162
+
+IF OFFICE IS OPEN (7 AM - 6 PM on open days):
+Our scheduling team is available right now to help with cancellations and rescheduling.please call us at (425) 775-5162.
 
 **Scheduling Team:**
 • Phone: (425) 775-5162
-• Hours: 7 AM to 6 PM, Mon, Tue, and Thu
+• Status: Open until 6 PM today
 • Services: Cancellations, rescheduling, and new appointments
 
-IMPORTANT: 
-1. Check the CURRENT DAY STATUS above for reference
-2. Each bullet point must be on a separate line with proper spacing
-3. Always provide scheduling team information regardless of current status
+USE THE CURRENT HOUR VALUE ABOVE TO CHOOSE THE RIGHT RESPONSE!
 
 User: "{user_question}"
 """,
@@ -1152,21 +1211,30 @@ User: "{user_question}"
         intent = self.detect_scheduling_intent(user_question)
         logger.info(f"🎯 Detected Intent: {intent}")
         
-        # Use direct response for critical intents to ensure correct time logic
-        if intent in ["see_me_request", "same_day_request"]:
-            direct_response = self.get_direct_response(intent, time_info, current_day_status, tomorrow_day_status, user_question)
-            if direct_response:
-                return AgentResponse(
-                    content=direct_response,
-                    confidence=1.0,
-                    agent_type=AgentType.SCHEDULING,
-                    reasoning_steps=[f"Direct response for {intent}", f"After hours: {self.is_after_office_hours()}, Before hours: {self.is_before_office_hours()}"],
-                    quality_score=100.0,
-                    attempts_used=1
-                )
+        # Add explicit time checking for see_me_request
+        if intent == "see_me_request":
+            from datetime import datetime
+            import pytz
+            pacific_tz = pytz.timezone('America/Los_Angeles')
+            now = datetime.now(pacific_tz)
+            current_hour = now.hour
+            
+            # Add time debugging to prompt
+            time_debug = f"\nCURRENT TIME DEBUG:\n- Hour: {current_hour}\n- After 6 PM: {current_hour >= 18}\n- Before 7 AM: {current_hour < 7}\n- Office Open: {current_day_status['is_open']}\n"
         
-        # Generate intent-specific prompt
+        # Generate intent-specific prompt with time debug info
         scheduling_prompt = self._get_intent_prompt(intent, time_info, current_day_status, tomorrow_day_status, user_question)
+        
+        # Add time debug for see_me_request
+        if intent == "see_me_request":
+            from datetime import datetime
+            import pytz
+            pacific_tz = pytz.timezone('America/Los_Angeles')
+            now = datetime.now(pacific_tz)
+            current_hour = now.hour
+            
+            time_debug = f"\n\nTIME LOGIC RULES:\n- Current Hour: {current_hour}\n- If hour >= 18: Show NEXT DAY response\n- If hour < 7: Show TODAY response\n- Office Status: {current_day_status['is_open']}\n\nFOLLOW THESE RULES EXACTLY!"
+            scheduling_prompt += time_debug
         
         try:
             response = self.client.chat.completions.create(
