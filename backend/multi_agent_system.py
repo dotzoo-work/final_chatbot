@@ -490,8 +490,30 @@ Please call to discuss your emergency and schedule tomorrow's appointment."""
 • Call: (425) 775-5162 - Leave emergency message
 • Next Open: {next_open} (7 AM - 6 PM)"""
         elif is_today_request or not (is_future_request or is_today_request):
-            # Today's emergency request
-            if current_day_status['is_open']:
+            # Today's emergency request - STEP 1: Check if today is closed day first
+            if time_info['current_day'] not in ['Monday', 'Tuesday', 'Thursday']:
+                next_open = self.get_next_open_day()
+                advice = self.get_emergency_advice(user_question)
+                if advice:
+                    emergency_response = f"""Dr. Tomar's office is closed today ({time_info['current_day']}), but emergency care is important.
+
+**Emergency Options:**
+
+• Call: (425) 775-5162 - Leave emergency message
+• Next Open: {next_open} (7 AM - 6 PM)
+
+**For immediate relief:**
+
+{advice}"""
+                else:
+                    emergency_response = f"""Dr. Tomar's office is closed today ({time_info['current_day']}), but emergency care is important.
+
+**Emergency Options:**
+
+• Call: (425) 775-5162 - Leave emergency message
+• Next Open: {next_open} (7 AM - 6 PM)"""
+            # STEP 2: Only if today is open day, check office hours
+            elif current_day_status['is_open']:
                 emergency_response = f"""Dr. Tomar's office is currently open and can schedule emergency appointments when available until 6 PM today.
 
 **Immediate Action:**
@@ -502,30 +524,80 @@ Please call to discuss your emergency and schedule tomorrow's appointment."""
 
 Please call immediately to discuss your emergency with Dr. Tomar's team."""
             else:
+                # STEP 3: Check time-based logic for closed office on open day
+                from datetime import datetime
+                import pytz
+                pacific_tz = pytz.timezone('America/Los_Angeles')
+                now = datetime.now(pacific_tz)
+                current_hour = now.hour
+                
                 next_open = self.get_next_open_day()
                 advice = self.get_emergency_advice(user_question)
-                if advice:
-                    emergency_response = f"""Dr. Tomar's office is currently closed, but emergency care is important.
-
-**Current Status:** {current_day_status['status_message']}
-
-**Emergency Options:**
-
-- Call: (425) 775-5162 - Leave an emergency message
-- Next Available Appointment: {next_open} (7 AM - 6 PM)
-
-**For immediate relief:**
-
-{advice}"""
-                else:
-                    emergency_response = f"""Dr. Tomar's office is currently closed, but emergency care is important.
-
-**Current Status:** {current_day_status['status_message']}
+                
+                if current_hour >= 18:  # After 6 PM
+                    if advice:
+                        emergency_response = f"""Dr. Tomar's office is closed for today (after 6 PM), but emergency care is important.
 
 **Emergency Options:**
 
 • Call: (425) 775-5162 - Leave emergency message
-• Next Available Appointment: {next_open} (7 AM - 6 PM)"""
+• Next Open: {next_open} at 7 AM
+
+**For immediate relief:**
+
+{advice}"""
+                    else:
+                        emergency_response = f"""Dr. Tomar's office is closed for today (after 6 PM), but emergency care is important.
+
+**Emergency Options:**
+
+• Call: (425) 775-5162 - Leave emergency message
+• Next Open: {next_open} at 7 AM"""
+                elif current_hour < 7:  # Before 7 AM
+                    if advice:
+                        emergency_response = f"""Dr. Tomar's office is currently closed but opens today at 7 AM, emergency care is important.
+
+**Today's Hours:** 7 AM - 6 PM
+
+**Emergency Options:**
+
+• Call: (425) 775-5162 - Leave emergency message
+• Opens today: 7 AM
+
+**For immediate relief:**
+
+{advice}"""
+                    else:
+                        emergency_response = f"""Dr. Tomar's office is currently closed but opens today at 7 AM, emergency care is important.
+
+**Today's Hours:** 7 AM - 6 PM
+
+**Emergency Options:**
+
+• Call: (425) 775-5162 - Leave emergency message
+• Opens today: 7 AM"""
+                else:
+                    # Between 7 AM and 6 PM - office should be open
+                    if advice:
+                        emergency_response = f"""Dr. Tomar's office is open today until 6 PM and can schedule emergency appointments when available.
+
+**Immediate Action:**
+
+• Call now: (425) 775-5162
+• Open until: 6 PM today
+• Location: Edmonds Bay Dental, Edmonds, WA
+
+**For immediate relief:**
+
+{advice}"""
+                    else:
+                        emergency_response = f"""Dr. Tomar's office is open today until 6 PM and can schedule emergency appointments when available .
+
+**Immediate Action:**
+
+• Call now: (425) 775-5162
+• Open until: 6 PM today
+• Location: Edmonds Bay Dental, Edmonds, WA"""
         
         # Return the template directly without AI processing to avoid unwanted additions
         content = emergency_response
@@ -747,9 +819,11 @@ If user asks about TOMORROW:
 - If tomorrow is closed day: "Tomorrow ({time_info['tomorrow_day']}) is closed"
 
 If user asks about TODAY or general scheduling:
-- Check if today ({time_info['current_day']}) is an open day AND current_day_status['is_open'] is True
-- If today is open AND office open: "Our clinic is open right now"
-- If today is closed day OR office closed: Show today's status
+STEP 1: First check if today is a CLOSED day
+- If today is Wed/Fri/Sat/Sun: Show closed day message immediately
+STEP 2: Only if today is OPEN day (Mon/Tue/Thu), then check office hours
+- If office open: "Our clinic is open right now"
+- If office closed: Use time-based logic (before 7 AM or after 6 PM)
 
 For TOMORROW requests:
 If {time_info['tomorrow_day']} in ['Monday', 'Tuesday', 'Thursday']:
@@ -796,6 +870,16 @@ We're currently closed but open today ({time_info['current_day']}) from 7 AM to 
 USE THE CURRENT HOUR VALUE ABOVE TO CHOOSE THE RIGHT RESPONSE!
 
 For TODAY requests:
+
+STEP 1: Check if today is CLOSED day first
+If {time_info['current_day']} NOT in ['Monday', 'Tuesday', 'Thursday']:
+Our office is closed today ({time_info['current_day']}). We are only open Monday, Tuesday, and Thursday.I’m unable to schedule your appointment directly, but please give us a call and our team can book an appointment when a slot is available.
+
+**Next Available:** {self.get_next_open_day(time_info['current_day'])}
+• Open Hours: 7 AM to 6 PM
+• please call us at : (425) 775-5162
+
+STEP 2: Only if today is OPEN day, check office hours
 If {time_info['current_day']} in ['Monday', 'Tuesday', 'Thursday'] AND current_day_status['is_open'] is True:
 Our clinic is open right now! I’m unable to schedule your appointment directly, but please give us a call and our team can book an appointment when a slot is available.
 **Contact Information:**
@@ -838,8 +922,15 @@ IMPORTANT: Same-day appointments are available on open days (Mon/Tue/Thu) regard
 
 CRITICAL LOGIC - Follow this exactly:
 
-Step 1: Check if today ({time_info['current_day']}) is an open day (Monday/Tuesday/Thursday)
+STEP 1: First check if today is CLOSED day
+If today ({time_info['current_day']}) NOT in ['Monday', 'Tuesday', 'Thursday']:
+Same-day appointments are not available today as our office is closed on {time_info['current_day']}s.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments
 
+**Next Available:** {self.get_next_open_day(time_info['current_day'])}
+• Open Hours: 7 AM to 6 PM
+• please call us at : (425) 775-5162 to schedule your appointment
+
+STEP 2: Only if today is OPEN day, check availability
 If today ({time_info['current_day']}) is an open day (Monday/Tuesday/Thursday):
 I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments.
 
@@ -854,14 +945,14 @@ If current_day_status['is_open'] is False:
 
 If {self.is_after_office_hours()}:
 Same-day appointments are no longer available today. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
-
+I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments
 **Next Available:**
 • Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
 • Phone: (425) 775-5162
 
 Elif {self.is_before_office_hours()}:
 We're currently closed but will open today at 7 AM to 6 PM for Same-day appointments.
-
+I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments
 **Today's Hours:**
 • Opens: 7 AM today
 • Closes: 6 PM today
@@ -871,7 +962,7 @@ Step 2: Check if today ({time_info['current_day']}) is NOT an open day (Wed/Fri/
 
 If today ({time_info['current_day']}) is NOT an open day (Wed/Fri/Sat/Sun):
 Same-day appointments are not available today as our office is closed on {time_info['current_day']}s.
-
+I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments
 **Available status:**
 
 • {current_day_status['status_message']}
@@ -893,6 +984,7 @@ CRITICAL LOGIC:
 
 For TODAY requests ("can you see me" without "tomorrow" or "next"):
 
+STEP 1: First check if today is CLOSED day
 If today ({time_info['current_day']}) is NOT an open day (Wed/Fri/Sat/Sun):
 Dr. Tomar's office is closed today ({time_info['current_day']}). Our next available day is {self.get_next_open_day(time_info['current_day'])}.
 
@@ -910,8 +1002,7 @@ IMPORTANT: Only use this response if today is actually a closed day (Wed/Fri/Sat
 
 CRITICAL: Check current status first!
 
-STEP 1: Check if today ({time_info['current_day']}) is an open day (Mon/Tue/Thu)
-
+STEP 2: Only if today is OPEN day, check office hours
 If {time_info['current_day']} in ['Monday', 'Tuesday', 'Thursday']:
 
 STEP 2: Check current office status
@@ -925,14 +1016,14 @@ STEP 3: Check time of day
 
 CRITICAL: Check the current hour to decide response:
 
-CURRENT HOUR: 
+CURRENT HOUR: {time_info['current_time']} (Use this to decide!)
 
 IF CURRENT HOUR >= 18 (6 PM or later):
-We're currently closed. Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
+We're closed for today (after 6 PM). Next opening is {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])} at 7 AM.
 
 **Next Available:**
 • Day: {time_info['tomorrow_day'] if time_info['tomorrow_day'] in ['Monday', 'Tuesday', 'Thursday'] else self.get_next_open_day(time_info['tomorrow_day'])}
-•  Open Hours: 7 AM - 6 PM
+• Hours: 7 AM - 6 PM
 • Phone: (425) 775-5162
 
 IF CURRENT HOUR < 7 (Before 7 AM):
@@ -941,6 +1032,9 @@ We're currently closed but open today ({time_info['current_day']}) from 7 AM to 
 **Contact Information:**
 • Phone: (425) 775-5162
 • Location: Edmonds Bay Dental, Edmonds, WA
+
+IF CURRENT HOUR 7-18 (Between 7 AM - 6 PM):
+Yes! Dr. Tomar can see you today. We are open until 6 PM. Please call (425) 775-5162 to schedule your appointment.
 
 USE THE CURRENT HOUR VALUE ABOVE TO CHOOSE THE RIGHT RESPONSE!
 
@@ -1034,7 +1128,19 @@ CRITICAL RULES:
 
 CRITICAL LOGIC - Follow this exactly:
 
-Step 1: Check if we are currently open TODAY
+STEP 1: First check if today is CLOSED day
+If today ({time_info['current_day']}) NOT in ['Monday', 'Tuesday', 'Thursday']:
+We are closed today ({time_info['current_day']}). We open next on {self.get_next_open_day(time_info['current_day'])} at 7 AM.
+
+**Office Hours:**
+• Monday: 7 AM - 6 PM
+• Tuesday: 7 AM - 6 PM
+• Thursday: 7 AM - 6 PM
+• Wednesday, Friday, Weekend: CLOSED
+
+**Contact:** (425) 775-5162
+
+STEP 2: Only if today is OPEN day, check current status
 If today ({time_info['current_day']}) is an open day AND current_day_status['is_open'] is True:
 We are open right now until 6 PM today!
 
@@ -1043,7 +1149,7 @@ We are open right now until 6 PM today!
 • Phone: (425) 775-5162
 • Location: Edmonds Bay Dental, Edmonds, WA
 
-Step 2: If today is an open day but currently closed:
+STEP 3: If today is open day but currently closed:
 If today ({time_info['current_day']}) is an open day (Monday/Tuesday/Thursday) AND current_day_status['is_open'] is False:
 
 Check current time:
@@ -1061,7 +1167,7 @@ We're currently closed but open today from 7 AM to 6 PM.
 For AFTER 6 PM (closed for today, show next opening):
 We're currently closed for today. Next opening information below.
 
-Step 3: If currently closed and need next opening:
+STEP 4: If currently closed and need next opening:
 Check tomorrow ({time_info['tomorrow_day']}):
 
 IF TOMORROW IS MONDAY, TUESDAY, OR THURSDAY:
@@ -1091,6 +1197,14 @@ Current Status: {current_day_status['status_message']}
 
 While I am unable to make cancel/reschedule appointments directly, our scheduling team is available to help.
 
+STEP 1: First check if today is CLOSED day
+If today ({time_info['current_day']}) NOT in ['Monday', 'Tuesday', 'Thursday']:
+Our office is closed today ({time_info['current_day']}). For cancellations/rescheduling, please call us on our next open day.
+
+**Next Available:** {self.get_next_open_day(time_info['current_day'])}
+**Contact:** (425) 775-5162
+
+STEP 2: Only if today is OPEN day, check office hours
 CRITICAL: Check the current hour to decide response:
 
 CURRENT HOUR: {time_info['current_time']} (Use this to decide!)
