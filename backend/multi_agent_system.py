@@ -259,6 +259,147 @@ GENERAL CONSULTATION SPECIALIZATION:
         confidence = max(0.1, min(1.0, base_confidence - attempt_penalty))
         return confidence
 
+class EmergencyAgent(BaseAgent):
+    """Simple emergency agent with fast responses"""
+    
+    def __init__(self, openai_client):
+        super().__init__(openai_client, AgentType.EMERGENCY)
+        
+    def get_current_time_info(self) -> Dict[str, any]:
+        """Get current time info"""
+        from datetime import datetime, timedelta
+        import pytz
+        
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        now = datetime.now(pacific_tz)
+        tomorrow = now + timedelta(days=1)
+        
+        return {
+            'current_day': now.strftime('%A'),
+            'tomorrow_day': tomorrow.strftime('%A'),
+            'hour': now.hour,
+            'time_str': now.strftime('%I:%M %p')
+        }
+    
+    def get_next_open_day(self, current_day: str) -> str:
+        """Get next open day"""
+        days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        open_days = {'Monday', 'Tuesday', 'Thursday'}
+        
+        idx = days.index(current_day)
+        for i in range(1, 8):
+            next_day = days[(idx + i) % 7]
+            if next_day in open_days:
+                return next_day
+        return 'Tuesday'
+    
+    def get_emergency_advice(self, user_question: str) -> str:
+        """Get dynamic emergency advice based on user's specific condition"""
+        q = user_question.lower()
+        advice_parts = []
+        
+        # Broken/damaged teeth
+        if any(word in q for word in ['broke', 'broken', 'chipped', 'cracked', 'fractured']):
+            advice_parts.append("**For Broken/Chipped Tooth:**\n• Rinse mouth gently with warm water\n• Save any broken pieces in milk or saliva\n• Apply cold compress to reduce swelling\n• Avoid chewing on the affected side")
+        
+        # Pain management
+        if any(word in q for word in ['pain', 'hurt', 'ache', 'throbbing', 'severe', 'unbearable']):
+            if any(word in q for word in ['severe', 'unbearable', 'excruciating']):
+                advice_parts.append("**For Severe Pain:**\n• Take over-the-counter pain reliever (follow package directions)\n• Apply cold compress for 15-20 minutes\n• Rinse with warm salt water (1/2 tsp salt in warm water)\n• Avoid very hot or cold foods/drinks\n• Keep head elevated when lying down")
+            else:
+                advice_parts.append("**For Tooth Pain:**\n• Rinse with warm salt water\n• Take pain reliever as directed\n• Apply cold compress to outside of cheek\n• Avoid hard, sticky, or very hot/cold foods")
+        
+        # Swelling
+        if any(word in q for word in ['swollen', 'swelling', 'puffy', 'inflamed']):
+            advice_parts.append("**For Swelling:**\n• Apply cold compress for 15-20 minutes, then remove for 15 minutes\n• Keep head elevated when resting\n• Avoid hot foods and drinks\n• Rinse gently with salt water")
+        
+        # Bleeding
+        if any(word in q for word in ['bleeding', 'blood', 'hemorrhage']):
+            advice_parts.append("**For Bleeding:**\n• Apply gentle pressure with clean gauze or cloth\n• Rinse very gently with cold water\n• Avoid spitting, rinsing vigorously, or using straws\n• If bleeding doesn't stop in 15 minutes, seek immediate care")
+        
+        # Knocked out tooth
+        if any(phrase in q for phrase in ['knocked out', 'fell out', 'lost tooth', 'tooth came out']):
+            advice_parts.append("**For Knocked Out Tooth (URGENT):**\n• Handle tooth by crown only, not the root\n• Rinse gently if dirty (don't scrub)\n• Try to reinsert in socket if possible\n• If not possible, keep in milk or saliva\n• Get to dentist within 30 minutes for best chance of saving tooth")
+        
+        # Abscess/infection
+        if any(word in q for word in ['abscess', 'infection', 'pus', 'fever']):
+            advice_parts.append("**For Possible Infection:**\n• Rinse with warm salt water several times daily\n• Apply cold compress to reduce swelling\n• Take pain reliever as needed\n• Do NOT apply heat or hot compress\n• Seek immediate care if fever develops")
+        
+        # Object stuck in teeth
+        if any(phrase in q for phrase in ['stuck', 'lodged', 'trapped', 'food stuck']):
+            advice_parts.append("**For Object Stuck in Teeth:**\n• Try gentle flossing to remove\n• Rinse with warm water\n• Do NOT use sharp objects like pins or needles\n• If unable to remove, see dentist promptly")
+        
+        # Jaw injury
+        if any(word in q for word in ['jaw', 'tmj', 'locked', 'dislocated']):
+            advice_parts.append("**For Jaw Injury:**\n• Apply cold compress to reduce swelling\n• Eat only soft foods\n• Avoid opening mouth wide\n• Support jaw with bandage if necessary\n• Seek immediate dental care")
+        
+        # General emergency advice if no specific condition detected
+        if not advice_parts:
+            advice_parts.append("**General Emergency Care:**\n• Rinse mouth gently with warm water\n• Apply cold compress if swelling\n• Take over-the-counter pain reliever if needed\n• Avoid hard, sticky, or extreme temperature foods\n• Contact dentist as soon as possible")
+        
+        return "\n\n".join(advice_parts)
+    
+    def detect_emergency_intent(self, user_question: str) -> str:
+        """Detect emergency intent"""
+        q = user_question.lower()
+        
+        if any(word in q for word in ['tomorrow', 'next']):
+            return 'tomorrow_emergency'
+        else:
+            return 'today_emergency'
+    
+    def generate_emergency_response(self, intent: str, time_info: Dict, user_question: str) -> str:
+        """Generate emergency responses"""
+        current_day = time_info['current_day']
+        tomorrow_day = time_info.get('tomorrow_day', '')
+        hour = time_info['hour']
+        next_open = self.get_next_open_day(current_day)
+        advice = self.get_emergency_advice(user_question)
+        
+        # Check office status
+        is_open_day = current_day in ['Monday', 'Tuesday', 'Thursday']
+        is_office_hours = 7 <= hour < 18
+        is_open = is_open_day and is_office_hours
+        is_tomorrow_open = tomorrow_day in ['Monday', 'Tuesday', 'Thursday']
+        
+        if intent == 'tomorrow_emergency':
+            if is_tomorrow_open:
+                return f"Yes, Dr. Tomar can see you for emergency tomorrow ({tomorrow_day}) 7 AM-6 PM. Call: (425) 775-5162 to schedule emergency appointment."
+            else:
+                next_after_tomorrow = self.get_next_open_day(tomorrow_day)
+                base_response = f"Dr. Tomar's office is closed tomorrow ({tomorrow_day}). Emergency care: Call (425) 775-5162. Next open: {next_after_tomorrow} 7 AM-6 PM."
+                return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
+        
+        else:  # today_emergency
+            if not is_open_day:
+                base_response = f"Dr. Tomar's office is closed today ({current_day}). Emergency care: Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
+                return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
+            elif is_open:
+                return "Dr. Tomar's office is currently open for emergency appointments.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. \n\n**Status:**\n\n• Open until 6 PM today.\n please Call us at : (425) 775-5162 to schedule your appointment"
+            elif hour < 7:
+                base_response = f"Currently closed but we open today at 7 AM to 6 PM for emergency care. Call: (425) 775-5162."
+                return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
+            else:  # hour >= 18
+                base_response = f"Currently closed (after 6 PM). Emergency care: Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
+                return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
+    
+    def process_emergency_query(self, user_question: str, context: str = "") -> AgentResponse:
+        """Process emergency queries"""
+        
+        # Get time info and detect intent
+        time_info = self.get_current_time_info()
+        intent = self.detect_emergency_intent(user_question)
+        content = self.generate_emergency_response(intent, time_info, user_question)
+        
+        return AgentResponse(
+            content=content,
+            confidence=0.95,
+            agent_type=AgentType.EMERGENCY,
+            reasoning_steps=[f"Emergency intent: {intent}", f"Day: {time_info['current_day']}"],
+            quality_score=95.0,
+            attempts_used=1
+        )
+
 class SchedulingAgent(BaseAgent):
     """Simple scheduling agent with fast responses"""
     
@@ -305,7 +446,7 @@ class SchedulingAgent(BaseAgent):
             return 'see_me_request'
         elif any(word in q for word in ['hours', 'open', 'close']):
             return 'hours_inquiry'
-        elif any(word in q for word in ['cancel', 'reschedule']):
+        elif any(word in q for word in ['cancel', 'reschedule','modified', 'change']):
             return 'modify_appointment'
         elif any(word in q for word in ['cost', 'price', 'fee']):
             return 'cost_inquiry'
@@ -331,31 +472,33 @@ class SchedulingAgent(BaseAgent):
         
         if intent == 'same_day_request':
             if not is_open_day:
-                return f"Same-day appointments not available today ({current_day} - office closed). Next available: {next_open} 7 AM-6 PM. Call: (425) 775-5162"
+                return f"Same-day appointments not available today ({current_day} - office closed). **Next available **: {next_open} 7 AM-6 PM.• Open Hours: 7 AM to 6 PM •please call us at : (425) 775-5162 to schedule your appointment"
+                
+                
             elif is_open:
-                return "Call now for same-day availability: (425) 775-5162. Currently open until 6 PM today."
+                return "Dr Tomar Clinic Open , Call now to schedule: (425) 775-5162.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Status: Open until 6 PM • Please call us at : (425) 775-5162 to schedule your appointment"
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM for same-day appointments. Call: (425) 775-5162"
+                return f"Currently closed but we open today at 7 AM to 6 PM for same-day appointments. I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Next available: {next_open} 7 AM-6 PM. Call: (425) 775-5162"
+                return f"Currently closed (after 6 PM). Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
         
         elif intent == 'see_me_request':
             if not is_open_day:
-                return f"Dr. Tomar's office is closed today ({current_day}). Next availability: {next_open} 7 AM-6 PM. Call: (425) 775-5162"
+                return f"Dr. Tomar's office is closed today ({current_day}). Next availability: {next_open} 7 AM-6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
             elif is_open:
-                return "Dr. Tomar may be available today. Call now: (425) 775-5162. Currently open until 6 PM."
+                return "Dr. Tomar may be available today. Call now: (425) 775-5162. Currently open until 6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Call: (425) 775-5162 to check availability."
+                return f"Currently closed but we open today at 7 AM to 6 PM. Please Call: (425) 775-5162 to check availability.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Next availability: {next_open} 7 AM-6 PM. Call: (425) 775-5162"
+                return f"Currently closed (after 6 PM). Next availability: {next_open} 7 AM-6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
         
         elif intent == 'hours_inquiry':
             if not is_open_day:
-                return f"Office closed today ({current_day}). Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Closed: Wed/Fri/Weekend. Call: (425) 775-5162"
+                return f"Office closed today ({current_day}). Next open: {next_open} 7 AM-6 PM. Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Closed: Wed/Fri/Weekend. Please Call: (425) 775-5162"
             elif is_open:
-                return "Currently open until 6 PM today! Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Closed: Wed/Fri/Weekend. Call: (425) 775-5162"
+                return "Currently open until 6 PM today! Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Closed: Wed/Fri/Weekend.Please Call: (425) 775-5162 for Scheduling your appointment."
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Call: (425) 775-5162"
+                return f"Currently closed but we open today at 7 AM to 6 PM. Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM.  Please Call: (425) 775-5162"
             else:  # hour >= 18
                 return f"Currently closed (after 6 PM). Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Next open: {next_open} 7 AM-6 PM. Call: (425) 775-5162"
         
@@ -384,13 +527,13 @@ class SchedulingAgent(BaseAgent):
         
         else:  # schedule_request
             if not is_open_day:
-                return f"Office closed today ({current_day}). Call (425) 775-5162 to schedule. Next available: {next_open} 7 AM-6 PM."
+                return f"Office closed today ({current_day}). Call (425) 775-5162 to schedule. Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments.\n• Please call us at : (425) 775-5162 to schedule your appointment"
             elif is_open:
-                return "Call now to schedule: (425) 775-5162. Currently open until 6 PM today."
+                return "Our clinic is open right now! I’m unable to schedule your appointment directly, but please give us a call and our team can book an appointment when a slot is available.\n\n**Contact Information:**\n\n • please call us at : (425) 775-5162 to schedule your appointment\n• Status: Open until 6 PM\n"
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Call: (425) 775-5162 to schedule."
+                return f"Currently closed but we open today at 7 AM to 6 PM.I’m unable to schedule your appointment directly, but please give us a call and our team can book an appointment when a slot is available.Please Call: (425) 775-5162 to schedule your appointment."
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Call (425) 775-5162 to schedule. Next available: {next_open} 7 AM-6 PM."
+                return f"Currently closed (after 6 PM). Call (425) 775-5162 to schedule. Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly,Our team can schedule your appointment when available. Please call us at (425) 775-5162 to schedule your appointment."
     
     def process_scheduling_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Process scheduling queries"""
@@ -433,7 +576,7 @@ class MultiAgentOrchestrator:
             AgentType.DIAGNOSTIC.value: BaseAgent(openai_client, AgentType.DIAGNOSTIC),
             AgentType.TREATMENT.value: BaseAgent(openai_client, AgentType.TREATMENT),
             AgentType.PREVENTION.value: BaseAgent(openai_client, AgentType.PREVENTION),
-            AgentType.EMERGENCY: BaseAgent(openai_client, AgentType.EMERGENCY),
+            AgentType.EMERGENCY: EmergencyAgent(openai_client),
             AgentType.SCHEDULING: SchedulingAgent(openai_client),
             AgentType.GENERAL: BaseAgent(openai_client, AgentType.GENERAL)
         }
@@ -450,6 +593,11 @@ class MultiAgentOrchestrator:
         if query_type == QueryType.SCHEDULING:
             scheduling_agent = self.agents[AgentType.SCHEDULING]
             return scheduling_agent.process_scheduling_query(user_question, context)
+        
+        # Route to emergency agent if classified as emergency
+        if query_type == QueryType.EMERGENCY:
+            emergency_agent = self.agents[AgentType.EMERGENCY]
+            return emergency_agent.process_emergency_query(user_question, context)
         
         # Route to appropriate agent
         agent = self.agents.get(query_type.value, self.agents[AgentType.GENERAL])
