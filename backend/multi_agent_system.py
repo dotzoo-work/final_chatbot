@@ -486,7 +486,7 @@ class SchedulingAgent(BaseAgent):
             if not is_open_day:
                 return f"Dr. Tomar's office is closed today ({current_day}). Next availability: {next_open} 7 AM-6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
             elif is_open:
-                return "Dr. Tomar may be available today. Call now: (425) 775-5162. Currently open until 6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
+                return "Dr. Tomar clinic open. Please Call now: (425) 775-5162. Currently open until 6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
             elif hour < 7:
                 return f"Currently closed but we open today at 7 AM to 6 PM. Please Call: (425) 775-5162 to check availability.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
             else:  # hour >= 18
