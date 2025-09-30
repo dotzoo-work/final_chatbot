@@ -480,7 +480,7 @@ class SchedulingAgent(BaseAgent):
             elif hour < 7:
                 return f"Currently closed but we open today at 7 AM to 6 PM for same-day appointments. I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
+                return f"Currently closed (after 6 PM). Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Next's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
         
         elif intent == 'see_me_request':
             if not is_open_day:
@@ -506,11 +506,11 @@ class SchedulingAgent(BaseAgent):
             if not is_open_day:
                 return f"Office closed today ({current_day}). To cancel/reschedule, call: (425) 775-5162. Next open: {next_open} 7 AM-6 PM"
             elif is_open:
-                return "Call now to cancel/reschedule: (425) 775-5162. Currently open until 6 PM today."
+                return "Clinic open ,Call now to cancel/reschedule: (425) 775-5162 Your Appointment. Currently open until 6 PM today."
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Call: (425) 775-5162 to cancel/reschedule."
+                return f"Currently closed but we open today at 7 AM to 6 PM. Please Call: (425) 775-5162 to cancel/reschedule your Appointment."
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). To cancel/reschedule, call: (425) 775-5162. Next open: {next_open} 7 AM-6 PM"
+                return f"Currently closed (after 6 PM). To cancel/reschedule, Please call: (425) 775-5162. Next open: {next_open} 7 AM-6 PM"
         
         elif intent == 'cost_inquiry':
             return "For pricing information, please call: (425) 775-5162. We'll discuss costs during consultation."
@@ -520,10 +520,10 @@ class SchedulingAgent(BaseAgent):
         
         elif intent == 'tomorrow_request':
             if is_tomorrow_open:
-                return f"Yes, we are open tomorrow ({tomorrow_day}) 7 AM-6 PM. Call (425) 775-5162 to schedule your appointment."
+                return f" we are open tomorrow ({tomorrow_day}) 7 AM-6 PM. Please Call (425) 775-5162 to schedule your appointment."
             else:
                 next_after_tomorrow = self.get_next_open_day(tomorrow_day)
-                return f"We are closed tomorrow ({tomorrow_day}). Next available: {next_after_tomorrow} 7 AM-6 PM. Call: (425) 775-5162"
+                return f"We are closed tomorrow ({tomorrow_day}). Next available: {next_after_tomorrow} 7 AM-6 PM.please Call: (425) 775-5162 to Schedule your apppointment"
         
         else:  # schedule_request
             if not is_open_day:
