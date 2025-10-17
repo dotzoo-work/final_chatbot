@@ -595,7 +595,7 @@ Analyze this dental consultation question and determine if it contains BOTH sche
 Question: "{user_question}"
 
 Scheduling elements include: appointment booking, timing, availability, office hours, scheduling, canceling, rescheduling
-General elements include: insurance, policies, procedures, health conditions, costs, locations, eligibility, COVID, illness
+General elements include: insurance, policies, procedures, health conditions, costs, locations, patient eligibility (out-of-state patients, travel questions), COVID, illness
 
 Respond with only "YES" if it contains BOTH elements, or "NO" if it contains only one type or neither.
 
@@ -629,8 +629,53 @@ Answer:"""
             # Fallback to simple keyword detection
             q = user_question.lower()
             has_scheduling = any(word in q for word in ['appointment', 'schedule', 'cancel', 'reschedule'])
-            has_general = any(word in q for word in ['insurance', 'covid', 'cost', 'policy'])
+            has_general = any(word in q for word in ['insurance', 'covid', 'cost', 'policy', 'state', 'out-of-state', 'travel', 'location', 'eligibility'])
             return has_scheduling and has_general
+    
+    def extract_general_intent(self, user_question: str) -> str:
+        """AI-powered extraction of general intent from mixed query"""
+        try:
+            intent_prompt = f"""
+Extract ONLY the general dental information request from this mixed question. Ignore scheduling/appointment parts.
+
+Question: "{user_question}"
+
+Focus on:
+- Medical conditions (cavity, pain, etc.)
+- Policies (insurance, COVID, etc.) 
+- General information (procedures, costs, etc.)
+- Patient eligibility questions (out-of-state patients, travel from other states)
+- Location and accessibility questions
+
+Ignore:
+- Appointment timing
+- Office hours
+- Scheduling requests
+
+Rephrase as a simple general question. If no general component exists, respond with "NONE".
+
+Examples:
+- "Can I get appointment tomorrow if I have cavity?" → "Cavities are holes in teeth caused by bacteria. Dr. Tomar treats them with fillings, crowns, or other procedures depending on severity."
+- "Do you accept insurance for root canal?" → "Yes, Dr. Tomar accepts most major insurance plans including UHC, Aetna, Delta Dental, and MetLife."
+- "Can I see Dr. Tomar if I live in another state?" → "Can patients from other states visit Dr. Tomar?"
+- "Do you see out-of-state patients?" → "Does Dr. Tomar accept patients from other states?"
+- "What are your office hours?" → "NONE"
+
+General question:"""
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": intent_prompt}],
+                temperature=0.1,
+                max_tokens=50
+            )
+            
+            result = response.choices[0].message.content.strip()
+            return result if result != "NONE" else ""
+            
+        except Exception as e:
+            print(f"Error in general intent extraction: {e}")
+            return ""
     
     def get_hybrid_response(self, user_question: str, context: str = "") -> AgentResponse:
         """Generate combined response from scheduling and general agents"""
@@ -639,61 +684,60 @@ Answer:"""
         scheduling_agent = self.agents[AgentType.SCHEDULING]
         scheduling_response = scheduling_agent.process_scheduling_query(user_question, context)
         
-        # Get general response
-        general_agent = self.agents[AgentType.GENERAL]
-        try:
-            rag_context, _ = self.rag_pipeline.retrieve_and_rank(user_question)
-        except:
-            rag_context = ""
-        general_response = general_agent.process_query(user_question, rag_context, QueryType.GENERAL)
+        # Extract general intent using AI
+        general_question = self.extract_general_intent(user_question)
+        general_content = ""
         
-        # Combine responses intelligently
-        combined_content = self.combine_responses(scheduling_response.content, general_response.content, user_question)
+        if general_question:
+            general_agent = self.agents[AgentType.GENERAL]
+            try:
+                rag_context, _ = self.rag_pipeline.retrieve_and_rank(general_question)
+            except:
+                rag_context = ""
+            
+            # Use extracted general question with explicit instruction
+            focused_prompt = f"Answer this general dental question. Do not include scheduling, appointment, or office hours information: {general_question}"
+            general_response = general_agent.process_query(focused_prompt, rag_context, QueryType.GENERAL)
+            general_content = general_response.content
+        
+        # Combine responses
+        combined_content = self.combine_responses(scheduling_response.content, general_content, user_question)
         
         return AgentResponse(
             content=combined_content,
-            confidence=(scheduling_response.confidence + general_response.confidence) / 2,
-            agent_type=AgentType.SCHEDULING,  # Primary type
-            reasoning_steps=scheduling_response.reasoning_steps + general_response.reasoning_steps,
-            quality_score=(scheduling_response.quality_score + general_response.quality_score) / 2,
-            attempts_used=max(scheduling_response.attempts_used, general_response.attempts_used)
+            confidence=scheduling_response.confidence,
+            agent_type=AgentType.SCHEDULING,
+            reasoning_steps=scheduling_response.reasoning_steps,
+            quality_score=scheduling_response.quality_score,
+            attempts_used=scheduling_response.attempts_used
         )
     
     def combine_responses(self, scheduling_content: str, general_content: str, user_question: str) -> str:
         """Intelligently combine scheduling and general responses"""
         
-        # Extract key information from general response
-        general_info = ""
+        # Use actual general agent response if available
+        if general_content and len(general_content.strip()) > 10:
+            # Clean general content by removing scheduling-related information
+            lines = [line.strip() for line in general_content.split('\n') if line.strip()]
+            cleaned_lines = []
+            
+            for line in lines:
+                # Skip lines with scheduling keywords
+                if not any(word in line.lower() for word in [
+                    'call', 'phone', 'schedule', 'appointment', 'office hours', 
+                    '775-5162', 'contact', 'reach us', 'available', 'open', 'closed'
+                ]):
+                    # Replace specific prices with generic cost guidance
+                    if any(price_indicator in line.lower() for price_indicator in ['$', 'ranges from', 'generally ranges', 'typically costs']):
+                        line = "Costs vary depending on the specific service and individual needs. For accurate pricing, please contact Dr. Tomar's office at (425) 775-5162."
+                    cleaned_lines.append(line)
+            
+            if cleaned_lines:
+                general_info = '\n'.join(cleaned_lines[:3])  # Take first 3 relevant lines
+                return f"{general_info}\n\n**Scheduling Information:**\n{scheduling_content}"
         
-        # Check for specific topics
-        if "insurance" in user_question.lower():
-            general_info = "Dr. Tomar accepts most major insurance plans including UHC, Aetna, Delta Dental, MetLife, and others. For specific coverage details, please call (425) 775-5162."
-        
-        elif "out of state" in user_question.lower() or "live out" in user_question.lower():
-            general_info = "Dr. Tomar welcomes patients from all states and locations."
-        
-        elif "cost" in user_question.lower() or "price" in user_question.lower():
-            general_info = "For accurate pricing information, please contact Dr. Tomar's office at (425) 775-5162. Costs vary based on individual needs and treatment complexity."
-        
-        elif "covid" in user_question.lower() or "coronavirus" in user_question.lower() or "test positive" in user_question.lower():
-            general_info = "Yes, you can cancel or reschedule your appointment if you test positive for COVID-19 or have symptoms. Please call (425) 775-5162 to inform our team. We prioritize the health and safety of all patients and staff."
-        
-        elif "sick" in user_question.lower() or "illness" in user_question.lower() or "symptoms" in user_question.lower():
-            general_info = "If you're feeling unwell or have symptoms, please call (425) 775-5162 to discuss rescheduling your appointment. We want to ensure the safety of all patients and staff."
-        
-        else:
-            # For any other general topic, extract relevant info from general response
-            if general_content and len(general_content.strip()) > 50:
-                # Take first meaningful paragraph from general response
-                lines = [line.strip() for line in general_content.split('\n') if line.strip()]
-                if lines:
-                    general_info = lines[0][:200] + "..." if len(lines[0]) > 200 else lines[0]
-        
-        # Combine with general info first, then scheduling
-        if general_info:
-            return f"{general_info}\n\n**Scheduling Information:**\n{scheduling_content}"
-        else:
-            return scheduling_content
+        # Fallback to scheduling only if no general content
+        return scheduling_content
     
     def route_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Route query to appropriate specialist agent"""
