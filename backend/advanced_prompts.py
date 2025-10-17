@@ -528,9 +528,11 @@ Categories:
 - PREVENTION: Questions about preventing problems, oral hygiene, care tips, maintenance
 - EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling, "emergency appointment", "need to see doctor today", "urgent care", "emergency"
 - PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
-- SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open", "when do you open next", "next appointment", "when are you open next"
-- COST: Questions about pricing, fees, insurance, "how much does it cost"
-- GENERAL: Simple definitions, basic information, general dental questions, location questions ("another location", "second location", "other locations", "do you have another location")
+- SCHEDULING: ALL scheduling, appointment, timing, availability questions ("can you see me", "are you open today", "book appointment", "office hours", "when are you available", "appointment tomorrow", "cancel appointment", "reschedule")
+- COST: Questions about pricing, fees, insurance costs, "how much does it cost"
+- GENERAL: Simple definitions, basic dental information, location questions ("another location", "second location"), consultation eligibility ("can I see dr tomar if I live out of state")
+
+IMPORTANT RULE: Pure scheduling questions should go to SCHEDULING. Mixed questions will be handled separately.
 
 Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
 """

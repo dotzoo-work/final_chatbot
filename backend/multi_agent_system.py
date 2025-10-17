@@ -124,8 +124,11 @@ GENERAL CONSULTATION SPECIALIZATION:
 - Dr. Tomar is expert in comprehensive dental care coordination
 - Dr. Tomar is skilled in patient communication and education
 - Dr. Tomar is experienced in holistic oral health assessment
-- Dr. Tomar focuses on overall patient wellbeing and care continuity.
-- Dr tomar only give Dental related problem solution not out of the context.
+- Dr. Tomar focuses on overall patient wellbeing and care continuity
+- Dr. Tomar welcomes patients from all locations and states
+- Expert in explaining consultation processes for out-of-state patients
+- Skilled in providing general dental information and office policies
+- Dr. Tomar only gives dental-related solutions, not out-of-context advice
 """
         }
         
@@ -583,8 +586,121 @@ class MultiAgentOrchestrator:
         
         logger.info("Multi-Agent System initialized with all specialist agents")
     
+    def is_mixed_query(self, user_question: str) -> bool:
+        """AI-powered mixed query detection"""
+        try:
+            mixed_detection_prompt = f"""
+Analyze this dental consultation question and determine if it contains BOTH scheduling/appointment elements AND general information elements.
+
+Question: "{user_question}"
+
+Scheduling elements include: appointment booking, timing, availability, office hours, scheduling, canceling, rescheduling
+General elements include: insurance, policies, procedures, health conditions, costs, locations, eligibility, COVID, illness
+
+Respond with only "YES" if it contains BOTH elements, or "NO" if it contains only one type or neither.
+
+Examples:
+- "Can I get appointment tomorrow if I don't have insurance?" → YES (appointment + insurance)
+- "Can I cancel my appointment if I test positive for COVID?" → YES (cancel appointment + COVID)
+- "What are your office hours?" → NO (only scheduling)
+- "Do you accept my insurance?" → NO (only general)
+
+Answer:"""
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": mixed_detection_prompt}],
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            result = response.choices[0].message.content.strip().upper()
+            is_mixed = result == "YES"
+            
+            # Debug logging
+            print(f"Question: {user_question}")
+            print(f"AI Mixed Detection: {result}")
+            print(f"Is mixed: {is_mixed}")
+            
+            return is_mixed
+            
+        except Exception as e:
+            print(f"Error in mixed query detection: {e}")
+            # Fallback to simple keyword detection
+            q = user_question.lower()
+            has_scheduling = any(word in q for word in ['appointment', 'schedule', 'cancel', 'reschedule'])
+            has_general = any(word in q for word in ['insurance', 'covid', 'cost', 'policy'])
+            return has_scheduling and has_general
+    
+    def get_hybrid_response(self, user_question: str, context: str = "") -> AgentResponse:
+        """Generate combined response from scheduling and general agents"""
+        
+        # Get scheduling response
+        scheduling_agent = self.agents[AgentType.SCHEDULING]
+        scheduling_response = scheduling_agent.process_scheduling_query(user_question, context)
+        
+        # Get general response
+        general_agent = self.agents[AgentType.GENERAL]
+        try:
+            rag_context, _ = self.rag_pipeline.retrieve_and_rank(user_question)
+        except:
+            rag_context = ""
+        general_response = general_agent.process_query(user_question, rag_context, QueryType.GENERAL)
+        
+        # Combine responses intelligently
+        combined_content = self.combine_responses(scheduling_response.content, general_response.content, user_question)
+        
+        return AgentResponse(
+            content=combined_content,
+            confidence=(scheduling_response.confidence + general_response.confidence) / 2,
+            agent_type=AgentType.SCHEDULING,  # Primary type
+            reasoning_steps=scheduling_response.reasoning_steps + general_response.reasoning_steps,
+            quality_score=(scheduling_response.quality_score + general_response.quality_score) / 2,
+            attempts_used=max(scheduling_response.attempts_used, general_response.attempts_used)
+        )
+    
+    def combine_responses(self, scheduling_content: str, general_content: str, user_question: str) -> str:
+        """Intelligently combine scheduling and general responses"""
+        
+        # Extract key information from general response
+        general_info = ""
+        
+        # Check for specific topics
+        if "insurance" in user_question.lower():
+            general_info = "Dr. Tomar accepts most major insurance plans including UHC, Aetna, Delta Dental, MetLife, and others. For specific coverage details, please call (425) 775-5162."
+        
+        elif "out of state" in user_question.lower() or "live out" in user_question.lower():
+            general_info = "Dr. Tomar welcomes patients from all states and locations."
+        
+        elif "cost" in user_question.lower() or "price" in user_question.lower():
+            general_info = "For accurate pricing information, please contact Dr. Tomar's office at (425) 775-5162. Costs vary based on individual needs and treatment complexity."
+        
+        elif "covid" in user_question.lower() or "coronavirus" in user_question.lower() or "test positive" in user_question.lower():
+            general_info = "Yes, you can cancel or reschedule your appointment if you test positive for COVID-19 or have symptoms. Please call (425) 775-5162 to inform our team. We prioritize the health and safety of all patients and staff."
+        
+        elif "sick" in user_question.lower() or "illness" in user_question.lower() or "symptoms" in user_question.lower():
+            general_info = "If you're feeling unwell or have symptoms, please call (425) 775-5162 to discuss rescheduling your appointment. We want to ensure the safety of all patients and staff."
+        
+        else:
+            # For any other general topic, extract relevant info from general response
+            if general_content and len(general_content.strip()) > 50:
+                # Take first meaningful paragraph from general response
+                lines = [line.strip() for line in general_content.split('\n') if line.strip()]
+                if lines:
+                    general_info = lines[0][:200] + "..." if len(lines[0]) > 200 else lines[0]
+        
+        # Combine with general info first, then scheduling
+        if general_info:
+            return f"{general_info}\n\n**Scheduling Information:**\n{scheduling_content}"
+        else:
+            return scheduling_content
+    
     def route_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Route query to appropriate specialist agent"""
+        
+        # Check for mixed queries first
+        if self.is_mixed_query(user_question):
+            return self.get_hybrid_response(user_question, context)
         
         # AI-powered query classification
         query_type = self.query_classifier.classify_query(user_question, self.client)
@@ -606,7 +722,10 @@ class MultiAgentOrchestrator:
         if context:
             rag_context = context
         else:
-            rag_context = self.rag_pipeline.get_relevant_context(user_question)
+            try:
+                rag_context, _ = self.rag_pipeline.retrieve_and_rank(user_question)
+            except:
+                rag_context = ""
         
         return agent.process_query(user_question, rag_context, query_type)
     
