@@ -543,9 +543,9 @@ Categories:
 - PREVENTION: Questions about preventing problems, oral hygiene, care tips, maintenance
 - EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling, "emergency appointment", "need to see doctor today", "urgent care", "emergency"
 - PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
-- SCHEDULING: ONLY appointment booking, timing, availability questions ("book appointment", "office hours", "when are you available", "appointment tomorrow", "cancel appointment", "reschedule")
+- SCHEDULING: ONLY appointment booking, timing, availability questions ("book appointment","can you see" , "office hours", "when are you available", "appointment tomorrow", "cancel appointment", "reschedule")
 - COST: Questions about pricing, fees, insurance costs, "how much does it cost"
-- GENERAL: Service questions ("do you do", "do you offer", "do you provide"), definitions, basic dental information, location questions ("another location", "second location"), patient eligibility from any state ("can I see dr tomar if I live out of state", "do you see patients from other states", "can patients from [state] visit", "travel from another state", "out of state patients", "patients from different states"), "can you see me" questions. IMPORTANT: Current time questions ("what time is it", "what's the time", "current time", "what is time") should be classified as GENERAL for out-of-context handling
+- GENERAL: Service questions ("do you do", "do you offer", "do you provide"), definitions, basic dental information, location questions ("another location", "second location"), patient eligibility from any state (" see dr tomar if I live out of state", "do you see patients from other states", "any  location patient visits", "travel from another state", "out of state patients", "patients from different states"), "can you see me" questions. IMPORTANT: Current time questions ("what time is it", "what's the time", "current time", "what is time") should be classified as GENERAL for out-of-context handling
 
 IMPORTANT RULE: Pure scheduling questions should go to SCHEDULING. Mixed questions will be handled separately.
 

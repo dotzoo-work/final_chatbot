@@ -475,9 +475,10 @@ class SchedulingAgent(BaseAgent):
         
         if intent == 'same_day_request':
             if not is_open_day:
-                return (f"Our office is closed today ({current_day}). "
-            f"I’m unable to schedule appointments directly, but our scheduling team can assist you with same-day availability.\n\n" 
+                return (f"Unfortunately,Our office is closed today ({current_day}). "
             f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
+             f"I’m unable to schedule appointments directly, but our scheduling team can assist you with same-day availability.\n\n" 
+           
             f"📞 Please call us at (425) 775-5162 to schedule your appointment.")
                 
             elif is_open:
@@ -488,13 +489,13 @@ class SchedulingAgent(BaseAgent):
 )
             elif hour < 7:
                 return (
-            "Our clinic is currently closed but will open today at 7 AM. "
+            "Unfortunately,Our clinic is currently closed but will open today at 7 AM. "
             "Same-day appointments are available once we open. "
-            "I’m unable to schedule directly, but our scheduling team can assist.\n\n"
+            "I’m unable to schedule appointments directly, but our scheduling team can assist.\n\n"
             "📞 Please call us at (425) 775-5162 to book your appointment.")  
             else:  # hour >= 18
                 return (
-            f"Our office has closed for the day (after 6 PM). "
+            f"Unfortunately,Our office has closed for the day (after 6 PM). "
             f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
             "📞 Please call us at (425) 775-5162 to schedule your appointment."
         )
@@ -503,7 +504,7 @@ class SchedulingAgent(BaseAgent):
 
             if not is_open_day:
              return (
-            f"Dr. Tomar’s office is closed today ({current_day}). "
+            f"Unfortunately,Dr. Tomar’s office is closed today ({current_day}). "
             f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
             "**Open Office Hours:**\n"
             "• Monday: 7 AM - 6 PM\n"
@@ -526,13 +527,13 @@ class SchedulingAgent(BaseAgent):
 
             elif hour < 7:
              return (
-            "Our office is currently closed but will open today at 7 AM. "
+            "Unfortunately,Our office is currently closed but will open today at 7 AM. "
             "You can call to check availability once we open.\n\n"
             "**Office Hours:**\n"
             "• Monday: 7 AM - 6 PM\n"
             "• Tuesday: 7 AM - 6 PM\n"
-            "• Thursday: 7 AM - 6 PM\n"
-            "• Wednesday, Friday, Weekend: Closed\n\n"
+            "• Thursday: 7 AM - 6 PM\n\n"
+            
             "📞 Please call us at (425) 775-5162 for appointments."
         )
 
@@ -552,10 +553,10 @@ class SchedulingAgent(BaseAgent):
         
           if not is_open_day:
            return (
-            f"Our office is closed today ({current_day}). "
+            f"Unfortunately,Our office is closed today ({current_day}). "
             f"We will reopen on {next_open} from 7 AM to 6 PM.\n\n"
-            "**Regular Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n"
-            "Closed on Wednesday, Friday, and weekends.\n\n"
+            "**Office Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n\n"
+           
             "📞 For more details, please call (425) 775-5162."
         )
 
@@ -570,21 +571,21 @@ class SchedulingAgent(BaseAgent):
           elif hour < 7:
            return (
             "We’re currently closed but will open today at 7 AM.\n\n"
-            "**Regular Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n"
-            "Closed on Wednesday, Friday, and weekends.\n\n"
+            "**Regular Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n\n"
+            
             "📞 Please call (425) 775-5162 for scheduling assistance."
         )
 
           else:  # hour >= 18
            return (
-            f"Our office has closed for the day (after 6 PM). "
+            f"Unfortunately,Our office has closed for the day (after 6 PM). "
             f"We’ll reopen on {next_open} from 7 AM to 6 PM.\n\n"
             "📞 For any scheduling needs, please call (425) 775-5162." )
 
         elif intent == 'modify_appointment':
           if not is_open_day:
            return (
-            f"Our office is closed today ({current_day}). "
+            f"Unfortunately,Our office is closed today ({current_day}). "
             f"To reschedule or cancel your appointment, please call (425) 775-5162. "
             f"We will reopen on {next_open} from 7 AM to 6 PM."
         )
@@ -597,13 +598,13 @@ class SchedulingAgent(BaseAgent):
 
           elif hour < 7:
            return (
-            "We’re currently closed but will open today at 7 AM. "
+            "Unfortunately,We’re currently closed but will open today at 7 AM. "
             "You can call us at (425) 775-5162 to cancel or reschedule your appointment once we open."
         )
 
           else:  # hour >= 18
            return (
-            f"Our office has closed for the day (after 6 PM). "
+            f"Unfortunately,Our office has closed for the day (after 6 PM). "
             f"To reschedule or cancel, please call (425) 775-5162. "
             f"We’ll reopen on {next_open} from 7 AM to 6 PM."
         )
@@ -637,7 +638,7 @@ class SchedulingAgent(BaseAgent):
         else:  # schedule_request
             if not is_open_day:
                 return (
-                    f"Our office is closed today ({current_day}). "
+                    f"Unfortunately,Our office is closed today ({current_day}). "
                     f"We’ll reopen on {next_open} from 7 AM to 6 PM. "
                     "I’m unable to schedule appointments directly, but our scheduling team can assist you.\n\n"
                     "📞 Please call (425) 775-5162 to book your appointment."
@@ -650,7 +651,7 @@ class SchedulingAgent(BaseAgent):
                 )
             elif hour < 7:
                 return (
-                    "We’re currently closed but will open today at 7 AM. "
+                    "Unfortunately,We’re currently closed but will open today at 7 AM. "
                     "Our team will be happy to assist with booking once we open.\n\n"
                     "📞 Please call (425) 775-5162 to schedule your appointment."
                 )
