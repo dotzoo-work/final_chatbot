@@ -183,7 +183,7 @@ Q. Do you treat toddlers?
 A. Yes, Dr. Tomar treats toddlers. Please contact our clinic for specific details and to schedule an appointment.
 
 Q. Do you have a hygienist? 
-A. Edmonds Bay Dental does not have a hygienist. Instead, Dr. Tomar is supported by highly qualified dental assistants personally recommended by him, ensuring comprehensive and reliable dental care.
+A. Edmonds Bay Dental does not have a hygienist. Instead,we have  dental assistants recommended by Dr. Tomar are highly qualified and dedicated to providing exceptional patient care.
 
 Q. Do you accept Medicare? 
 A. Edmonds Bay Dental does not participate in Medicare insurance plans. Please contact our clinic to learn about our in-house plans and options.
@@ -201,6 +201,9 @@ Q. Do you have another dental location?
 A. Yes. Dr. Tomar also practices at Pacific Highway Dental Clinic.Location -27020 Pacific Highway South, Suite C,
 
 Kent, WA 98032. Please contact the clinic for exact address and hours.
+
+Q. What time is it right now?
+A. I am unable to answer that question. I'm a virtual assistant for Dr. Meenakshi Tomar and can only assist with dental and oral health-related inquiries. How can I help you with your dental needs today?
 """
     
     def context_optimization(self, chunks: List[RetrievedChunk], query: str) -> str:

@@ -505,7 +505,7 @@ class SchedulingAgent(BaseAgent):
              return (
             f"Dr. Tomar’s office is closed today ({current_day}). "
             f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
-            "** Open Office Hours:**\n"
+            "**Open Office Hours:**\n"
             "• Monday: 7 AM - 6 PM\n"
             "• Tuesday: 7 AM - 6 PM\n"
             "• Thursday: 7 AM - 6 PM\n\n"
@@ -639,7 +639,7 @@ class SchedulingAgent(BaseAgent):
                 return (
                     f"Our office is closed today ({current_day}). "
                     f"We’ll reopen on {next_open} from 7 AM to 6 PM. "
-                    "I’m unable to schedule directly, but our scheduling team can assist you.\n\n"
+                    "I’m unable to schedule appointments directly, but our scheduling team can assist you.\n\n"
                     "📞 Please call (425) 775-5162 to book your appointment."
                 )
             elif is_open:
@@ -707,6 +707,78 @@ class MultiAgentOrchestrator:
         }
         
         logger.info("Multi-Agent System initialized with all specialist agents")
+    
+    def is_out_of_context(self, user_question: str, context: str = "") -> bool:
+        """Detect if question is completely out of dental context after checking knowledge base"""
+        
+        # First check if we have information in knowledge base or FAQ
+        if context and len(context.strip()) > 50:  # Use pre-retrieved context
+            return False
+        
+        # If no context provided, retrieve it
+        if not context:
+            try:
+                context, _ = self.rag_pipeline.retrieve_and_rank(user_question)
+                if context and len(context.strip()) > 50:  # Meaningful context found
+                    return False
+            except:
+                pass
+        
+        # Quick check for common out-of-context patterns
+        q = user_question.lower().strip()
+        time_patterns = ['what time is it', "what's the time", 'current time', 'time now']
+        if any(pattern in q for pattern in time_patterns):
+            return True  # Definitely out-of-context
+        
+        try:
+            out_of_context_prompt = f"""
+Analyze this question and determine if it's related to dental/oral health or completely unrelated.
+
+Question: "{user_question}"
+
+IMPORTANT: Only mark as OUT_OF_CONTEXT if the question is completely unrelated to dental practice, office, or oral health.
+
+Dental/oral health topics include: teeth, gums, mouth, dental procedures, oral hygiene, dental appointments, dental office, dentist services, oral pain, dental treatments, dental insurance, dental locations, staff languages, office staff, dental team, clinic information, office policies, patient services, dental practice, another practice, second practice, multiple locations, other offices, practice locations, dental clinics.
+
+Non-dental topics include: weather, asking for current time ("what time is it", "what's the time", "current time"), sports, politics, general health (not oral), cooking, technology, entertainment, etc.
+
+Respond with only "DENTAL" if it's dental-related or "OUT_OF_CONTEXT" if it's completely unrelated to dental/oral health:
+"""
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": out_of_context_prompt}],
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            result = response.choices[0].message.content.strip().upper()
+            return result == "OUT_OF_CONTEXT"
+            
+        except Exception as e:
+            print(f"Error in out-of-context detection: {e}")
+            # Fallback to simple keyword check
+            q = user_question.lower()
+            
+            # First check if it's definitely dental-related
+            dental_keywords = [
+                'dr tomar', 'doctor tomar', 'dentist', 'dental', 'practice', 
+                'office', 'clinic', 'location', 'staff', 'team', 'appointment',
+                'tooth', 'teeth', 'gum', 'mouth', 'oral', 'treatment'
+            ]
+            if any(keyword in q for keyword in dental_keywords):
+                return False  # Definitely dental-related
+            
+            # Only very specific non-dental questions
+            non_dental_patterns = [
+                'what time is it', 'what\'s the time', 'current time',
+                'weather', 'temperature', 'rain', 'snow',
+                'sports', 'football', 'basketball', 'soccer',
+                'politics', 'election', 'president',
+                'cooking', 'recipe', 'food preparation',
+                'music', 'song', 'movie', 'film'
+            ]
+            return any(pattern in q for pattern in non_dental_patterns)
     
     def is_mixed_query(self, user_question: str) -> bool:
         """AI-powered mixed query detection"""
@@ -863,6 +935,17 @@ General question:"""
     
     def route_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Route query to appropriate specialist agent"""
+        
+        # Check for out-of-context questions first using already retrieved context
+        if self.is_out_of_context(user_question, context):
+            return AgentResponse(
+                content="I am unable to answer that question. I'm a virtual assistant for Dr. Meenakshi Tomar and can only help with dental and oral health related questions. How can I assist you with your dental needs today?",
+                confidence=1.0,
+                agent_type=AgentType.GENERAL,
+                reasoning_steps=["Out-of-context question detected"],
+                quality_score=100.0,
+                attempts_used=1
+            )
         
         # Check for mixed queries first
         if self.is_mixed_query(user_question):
