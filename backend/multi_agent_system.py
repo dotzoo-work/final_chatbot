@@ -475,69 +475,191 @@ class SchedulingAgent(BaseAgent):
         
         if intent == 'same_day_request':
             if not is_open_day:
-                return f"Same-day appointments not available today ({current_day} - office closed). **Next available **: {next_open} 7 AM-6 PM.• Open Hours: 7 AM to 6 PM •please call us at : (425) 775-5162 to schedule your appointment"
-                
+                return (f"Our office is closed today ({current_day}). "
+            f"I’m unable to schedule appointments directly, but our scheduling team can assist you with same-day availability.\n\n" 
+            f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
+            f"📞 Please call us at (425) 775-5162 to schedule your appointment.")
                 
             elif is_open:
-                return "Dr Tomar Clinic Open , Call now to schedule: (425) 775-5162.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Status: Open until 6 PM • Please call us at : (425) 775-5162 to schedule your appointment"
+                return (
+            "Dr. Tomar’s Clinic is open today until 6 PM. "
+            "I’m unable to schedule appointments directly, but our scheduling team can assist you with same-day availability.\n\n"
+            "📞 Please call us at (425) 775-5162 to schedule your appointment."
+)
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM for same-day appointments. I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Today's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
+                return (
+            "Our clinic is currently closed but will open today at 7 AM. "
+            "Same-day appointments are available once we open. "
+            "I’m unable to schedule directly, but our scheduling team can assist.\n\n"
+            "📞 Please call us at (425) 775-5162 to book your appointment.")  
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. **Next's Availability:** • Opens at 7 AM -6 PM • please call us at : (425) 775-5162 to schedule your appointment"
-        
+                return (
+            f"Our office has closed for the day (after 6 PM). "
+            f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
+            "📞 Please call us at (425) 775-5162 to schedule your appointment."
+        )
+  
         elif intent == 'see_me_request':
+
             if not is_open_day:
-                return f"Dr. Tomar's office is closed today ({current_day}). Next availability: {next_open} 7 AM-6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
+             return (
+            f"Dr. Tomar’s office is closed today ({current_day}). "
+            f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
+            "** Open Office Hours:**\n"
+            "• Monday: 7 AM - 6 PM\n"
+            "• Tuesday: 7 AM - 6 PM\n"
+            "• Thursday: 7 AM - 6 PM\n\n"
+            
+            "📞 Please call us at (425) 775-5162 for appointments."
+        )
+
             elif is_open:
-                return "Dr. Tomar clinic open. Please Call now: (425) 775-5162. Currently open until 6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
+              return (
+            "Dr. Tomar’s Clinic is open today until 6 PM.\n\n"
+            "**Office Hours:**\n"
+            "• Monday: 7 AM - 6 PM\n"
+            "• Tuesday: 7 AM - 6 PM\n"
+            "• Thursday: 7 AM - 6 PM\n"
+            "• Wednesday, Friday, Weekend: Closed\n\n"
+            "📞 Please call us at (425) 775-5162 to schedule your visit."
+        )
+
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Please Call: (425) 775-5162 to check availability.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
+             return (
+            "Our office is currently closed but will open today at 7 AM. "
+            "You can call to check availability once we open.\n\n"
+            "**Office Hours:**\n"
+            "• Monday: 7 AM - 6 PM\n"
+            "• Tuesday: 7 AM - 6 PM\n"
+            "• Thursday: 7 AM - 6 PM\n"
+            "• Wednesday, Friday, Weekend: Closed\n\n"
+            "📞 Please call us at (425) 775-5162 for appointments."
+        )
+
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Next availability: {next_open} 7 AM-6 PM.\n\n**Office Hours:**\n\n• Monday: 7 AM - 6 PM\n• Tuesday: 7 AM - 6 PM\n• Thursday: 7 AM - 6 PM\n• Wednesday, Friday, Weekend: Closed\n\n**Please Call Us:** (425) 775-5162 for appointments"
-        
+              return (
+            f"Our office has closed for the day (after 6 PM). "
+            f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
+            "**Office Hours:**\n"
+            "• Monday: 7 AM - 6 PM\n"
+            "• Tuesday: 7 AM - 6 PM\n"
+            "• Thursday: 7 AM - 6 PM\n"
+            "• Wednesday, Friday, Weekend: Closed\n\n"
+            "📞 Please call us at (425) 775-5162 for appointments."
+        )
+
         elif intent == 'hours_inquiry':
-            if not is_open_day:
-                return f"Office closed today ({current_day}). Next open: {next_open} 7 AM-6 PM. Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Closed: Wed/Fri/Weekend. Please Call: (425) 775-5162"
-            elif is_open:
-                return "Currently open until 6 PM today! Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Closed: Wed/Fri/Weekend.Please Call: (425) 775-5162 for Scheduling your appointment."
-            elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM.  Please Call: (425) 775-5162"
-            else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Office Hours: Monday/Tuesday/Thursday 7 AM-6 PM. Next open: {next_open} 7 AM-6 PM. Call: (425) 775-5162"
         
+          if not is_open_day:
+           return (
+            f"Our office is closed today ({current_day}). "
+            f"We will reopen on {next_open} from 7 AM to 6 PM.\n\n"
+            "**Regular Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n"
+            "Closed on Wednesday, Friday, and weekends.\n\n"
+            "📞 For more details, please call (425) 775-5162."
+        )
+
+          elif is_open:
+           return (
+            "We’re currently open until 6 PM today.\n\n"
+            "**Regular Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n"
+            "Closed on Wednesday, Friday, and weekends.\n\n"
+            "📞 Please call (425) 775-5162 to schedule your appointment."
+        )
+
+          elif hour < 7:
+           return (
+            "We’re currently closed but will open today at 7 AM.\n\n"
+            "**Regular Hours:** Monday, Tuesday, Thursday – 7 AM to 6 PM.\n"
+            "Closed on Wednesday, Friday, and weekends.\n\n"
+            "📞 Please call (425) 775-5162 for scheduling assistance."
+        )
+
+          else:  # hour >= 18
+           return (
+            f"Our office has closed for the day (after 6 PM). "
+            f"We’ll reopen on {next_open} from 7 AM to 6 PM.\n\n"
+            "📞 For any scheduling needs, please call (425) 775-5162." )
+
         elif intent == 'modify_appointment':
-            if not is_open_day:
-                return f"Office closed today ({current_day}). To cancel/reschedule, call: (425) 775-5162. Next open: {next_open} 7 AM-6 PM"
-            elif is_open:
-                return "Clinic open ,Call now to cancel/reschedule: (425) 775-5162 Your Appointment. Currently open until 6 PM today."
-            elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM. Please Call: (425) 775-5162 to cancel/reschedule your Appointment."
-            else:  # hour >= 18
-                return f"Currently closed (after 6 PM). To cancel/reschedule, Please call: (425) 775-5162. Next open: {next_open} 7 AM-6 PM"
-        
+          if not is_open_day:
+           return (
+            f"Our office is closed today ({current_day}). "
+            f"To reschedule or cancel your appointment, please call (425) 775-5162. "
+            f"We will reopen on {next_open} from 7 AM to 6 PM."
+        )
+
+          elif is_open:
+           return (
+            "Our clinic is open today until 6 PM. "
+            "To reschedule or cancel your appointment, please call (425) 775-5162."
+        )
+
+          elif hour < 7:
+           return (
+            "We’re currently closed but will open today at 7 AM. "
+            "You can call us at (425) 775-5162 to cancel or reschedule your appointment once we open."
+        )
+
+          else:  # hour >= 18
+           return (
+            f"Our office has closed for the day (after 6 PM). "
+            f"To reschedule or cancel, please call (425) 775-5162. "
+            f"We’ll reopen on {next_open} from 7 AM to 6 PM."
+        )
+
         elif intent == 'cost_inquiry':
-            return "For pricing information, please call: (425) 775-5162. We'll discuss costs during consultation."
-        
+          return (
+        "For detailed pricing information, please contact our office at (425) 775-5162. "
+        "Our team will be happy to discuss costs during your consultation."
+    )
+
         elif intent == 'insurance_inquiry':
-            return "For insurance coverage details, call: (425) 775-5162. We accept most major insurance plans."
-        
+         return (
+        "For insurance coverage information, please call (425) 775-5162. "
+        "We’re happy to confirm whether your plan is accepted."
+    )
+
         elif intent == 'tomorrow_request':
             if is_tomorrow_open:
-                return f" we are open tomorrow ({tomorrow_day}) 7 AM-6 PM. Please Call (425) 775-5162 to schedule your appointment."
+                return (
+                    f"Our office will be open tomorrow ({tomorrow_day}) from 7 AM to 6 PM. "
+                    "📞 Please call (425) 775-5162 to schedule your appointment."
+                )
             else:
                 next_after_tomorrow = self.get_next_open_day(tomorrow_day)
-                return f"We are closed tomorrow ({tomorrow_day}). Next available: {next_after_tomorrow} 7 AM-6 PM.please Call: (425) 775-5162 to Schedule your apppointment"
-        
+                return (
+                    f"Our office will be closed tomorrow ({tomorrow_day}). "
+                    f"The next available day is {next_after_tomorrow}, from 7 AM to 6 PM.\n\n"
+                    "📞 Please call (425) 775-5162 to schedule your appointment."
+                )
+
         else:  # schedule_request
             if not is_open_day:
-                return f"Office closed today ({current_day}). Call (425) 775-5162 to schedule. Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments.\n• Please call us at : (425) 775-5162 to schedule your appointment"
+                return (
+                    f"Our office is closed today ({current_day}). "
+                    f"We’ll reopen on {next_open} from 7 AM to 6 PM. "
+                    "I’m unable to schedule directly, but our scheduling team can assist you.\n\n"
+                    "📞 Please call (425) 775-5162 to book your appointment."
+                )
             elif is_open:
-                return "Our clinic is open right now! I’m unable to schedule your appointment directly, but please give us a call and our team can book an appointment when a slot is available.\n\n**Contact Information:**\n\n • please call us at : (425) 775-5162 to schedule your appointment\n• Status: Open until 6 PM\n"
+                return (
+                    "Our clinic is open right now until 6 PM. "
+                    "I’m unable to schedule appointments directly, but our team will gladly help you find the next available slot.\n\n"
+                    "📞 Please call (425) 775-5162 to schedule your appointment."
+                )
             elif hour < 7:
-                return f"Currently closed but we open today at 7 AM to 6 PM.I’m unable to schedule your appointment directly, but please give us a call and our team can book an appointment when a slot is available.Please Call: (425) 775-5162 to schedule your appointment."
+                return (
+                    "We’re currently closed but will open today at 7 AM. "
+                    "Our team will be happy to assist with booking once we open.\n\n"
+                    "📞 Please call (425) 775-5162 to schedule your appointment."
+                )
             else:  # hour >= 18
-                return f"Currently closed (after 6 PM). Call (425) 775-5162 to schedule. Next available: {next_open} 7 AM-6 PM.I’m unable to schedule your appointment directly,Our team can schedule your appointment when available. Please call us at (425) 775-5162 to schedule your appointment."
-    
+                return (
+                    f"Our office has closed for the day (after 6 PM). "
+                    f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
+                    "📞 Please call (425) 775-5162 to schedule your appointment."
+                )
     def process_scheduling_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Process scheduling queries"""
         

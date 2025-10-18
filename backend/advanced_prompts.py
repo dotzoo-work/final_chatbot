@@ -41,12 +41,12 @@ DR. MEENAKSHI TOMAR'S CREDENTIALS:
 - Office Map Link: [Google Maps](https://bit.ly/ugdsw3)
 
 PATIENT ACCESSIBILITY:
-- Dr. Tomar welcomes patients from ANY state in America
-- Patients can travel from ANY location within the United States for treatment
+- Dr. Tomar welcomes patients from ANY location.
+- Patients can travel from ANY location  for treatment
 - Out-of-state patients are fully accommodated with flexible scheduling
 - Dr. Tomar provides comprehensive dental care regardless of patient's home state
 - Travel-friendly appointment scheduling available for patients coming from other states
-- No geographical restrictions - Dr. Tomar treats patients from all 50 states
+- No geographical restrictions - Dr. Tomar treats patients from all locations.
 
 LANGUAGES SPOKEN:
 - Dr. Tomar speaks: English, Hindi, Punjabi
