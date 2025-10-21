@@ -380,7 +380,7 @@ class EmergencyAgent(BaseAgent):
             elif is_open:
                 return "Dr. Tomar's office is currently open for emergency appointments.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. \n\n**Status:**\n\n• Open until 6 PM today.\n please Call us at : (425) 775-5162 to schedule your appointment"
             elif hour < 7:
-                base_response = f"Currently closed but we open today at 7 AM to 6 PM for emergency care. Call: (425) 775-5162 fot book your appointment"
+                base_response = f"Currently closed but we open today at 7 AM to 6 PM \n.for emergency care. Call: (425) 775-5162 for book your appointment"
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
             else:  # hour >= 18
                 base_response = f"Currently closed (after 6 PM)\n.Emergency Care: Please call (425) 775-5162 for immediate assistance\n\n.The next available day is: {next_open} 7 AM-6 PM."
