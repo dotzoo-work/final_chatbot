@@ -386,13 +386,72 @@ class EmergencyAgent(BaseAgent):
                 base_response = f"Currently closed (after 6 PM). Emergency care: Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
     
+    def generate_intelligent_emergency_response(self, user_question: str, intent: str, time_info: Dict) -> str:
+        """Generate intelligent emergency responses based on user question and situation"""
+        try:
+            advice = self.get_emergency_advice(user_question)
+            
+            prompt = f"""
+You are Dr. Meenakshi Tomar's emergency dental assistant. Generate a professional, urgent response to the patient's emergency question.
+
+Patient Emergency: "{user_question}"
+Intent: {intent}
+Current Time Info: {time_info}
+Emergency Care Instructions: {advice}
+
+Office Details:
+- Dr. Meenakshi Tomar's Dental Office
+- Phone: (425) 775-5162
+- Hours: Monday, Tuesday, Thursday (7 AM - 6 PM)
+- Closed: Wednesday, Friday, Weekends
+
+Guidelines:
+1. Show urgency and empathy for dental emergency
+2. Address the specific emergency situation
+3. Include relevant emergency care instructions
+4. Provide clear office status and contact information
+5. Use professional but urgent tone
+6. Keep response focused and actionable
+
+Generate an emergency response:"""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=400,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content.strip()
+            
+        except Exception as e:
+            logger.error(f"Error generating intelligent emergency response: {e}")
+            return self.generate_basic_emergency_response(intent, time_info, user_question)
+    
+    def generate_basic_emergency_response(self, intent: str, time_info: Dict, user_question: str) -> str:
+        """Fallback emergency response when AI generation fails"""
+        current_day = time_info['current_day']
+        hour = time_info['hour']
+        is_open_day = current_day in ['Monday', 'Tuesday', 'Thursday']
+        next_open = self.get_next_open_day(current_day)
+        advice = self.get_emergency_advice(user_question)
+        
+        if not is_open_day:
+            base_response = f"🚨 Emergency: Office closed today ({current_day}). Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
+        elif 7 <= hour < 18:
+            base_response = "🚨 Emergency: Office open now until 6 PM. Call (425) 775-5162 immediately."
+        else:
+            base_response = f"🚨 Emergency: Office closed. Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
+        
+        return base_response + (f"\n\n**Immediate Care:**\n{advice}" if advice else "")
+
     def process_emergency_query(self, user_question: str, context: str = "") -> AgentResponse:
-        """Process emergency queries"""
+        """Process emergency queries with intelligent responses"""
         
         # Get time info and detect intent
         time_info = self.get_current_time_info()
         intent = self.detect_emergency_intent(user_question)
-        content = self.generate_emergency_response(intent, time_info, user_question)
+        content = self.generate_intelligent_emergency_response(user_question, intent, time_info)
         
         return AgentResponse(
             content=content,
@@ -661,8 +720,85 @@ class SchedulingAgent(BaseAgent):
                     f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
                     "📞 Please call (425) 775-5162 to schedule your appointment."
                 )
+    def generate_intelligent_response(self, user_question: str, intent: str, time_info: dict) -> str:
+        """Generate intelligent, context-aware responses based on user question and current situation"""
+        try:
+            # Create context-aware prompt for AI response generation
+            prompt = f"""
+You are Dr. Meenakshi Tomar's Virtual assistant. Generate a professional, helpful response to the patient's question.
+
+Patient Question: "{user_question}"
+Intent: {intent}
+Current Time Info: {time_info}
+
+Office Details:
+- Dr. Meenakshi Tomar's Dental Office
+- Phone: (425) 775-5162
+- Hours: Monday, Tuesday, Thursday (7 AM - 6 PM)
+- Closed: Wednesday, Friday, Weekends
+- Second Location: Pacific Highway Dental, Kent, WA (253) 529-9434
+
+IMPORTANT Messaging Guidelines:
+1. Only mention you are a virtual assistant when user asks for scheduling appointments
+2. Explain that the scheduling team will book appointments when available
+3. Never say "we'll be happy to assist" - instead say "our scheduling team will assist when available"
+4. Use proper formatting with bullet points and clear sections
+5. Address the specific question asked
+6. Include relevant office hours/status based on current time
+7. Always provide phone number for scheduling
+8. Use appropriate tone for the situation
+
+Formatting Requirements:
+- Use bullet points (•) for office hours and key information
+- Use **bold** for important sections like "Office Status" or "Next Steps"
+- Keep information well-aligned and easy to read
+- Use line breaks for better readability
+
+Generate a well-formatted, contextual response:"""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content.strip()
+            
+        except Exception as e:
+            # Fallback to basic response
+            return self.generate_basic_response(intent, time_info)
+    
+    def generate_basic_response(self, intent: str, time_info: dict) -> str:
+        """Fallback method for basic responses when AI generation fails"""
+        current_day = time_info['current_day']
+        hour = time_info['hour']
+        is_open_day = current_day in ['Monday', 'Tuesday', 'Thursday']
+        is_office_hours = 7 <= hour < 18
+        is_open = is_open_day and is_office_hours
+        next_open = self.get_next_open_day(current_day)
+
+        if not is_open_day:
+            return (
+                f"I'm a virtual assistant for Dr. Tomar's office. Our office is closed today ({current_day}). "
+                f"We'll reopen on {next_open} from 7 AM to 6 PM. Our scheduling team will assist when available. "
+                "📞 Please call (425) 775-5162 for appointments."
+            )
+        elif is_open:
+            return (
+                "I'm a virtual assistant for Dr. Tomar's office. We're currently open until 6 PM today. "
+                "Our scheduling team will assist when available. "
+                "📞 Please call (425) 775-5162 to schedule your appointment."
+            )
+        else:
+            return (
+                f"I'm a virtual assistant for Dr. Tomar's office. Our office has closed for the day. "
+                f"We'll reopen on {next_open} from 7 AM to 6 PM. Our scheduling team will assist when available. "
+                "📞 Please call (425) 775-5162 for appointments."
+            )
+
     def process_scheduling_query(self, user_question: str, context: str = "") -> AgentResponse:
-        """Process scheduling queries"""
+        """Process scheduling queries with intelligent responses"""
         
         # Check for location questions
         if 'location' in user_question.lower():
@@ -678,7 +814,9 @@ class SchedulingAgent(BaseAgent):
         # Get time info and detect intent
         time_info = self.get_current_time_info()
         intent = self.detect_scheduling_intent(user_question)
-        content = self.generate_response(intent, time_info)
+        
+        # Generate intelligent response based on context
+        content = self.generate_intelligent_response(user_question, intent, time_info)
         
         return AgentResponse(
             content=content,
@@ -781,158 +919,7 @@ Respond with only "DENTAL" if it's dental-related or "OUT_OF_CONTEXT" if it's co
             ]
             return any(pattern in q for pattern in non_dental_patterns)
     
-    def is_mixed_query(self, user_question: str) -> bool:
-        """AI-powered mixed query detection"""
-        try:
-            mixed_detection_prompt = f"""
-Analyze this dental consultation question and determine if it contains BOTH scheduling/appointment elements AND general information elements.
 
-Question: "{user_question}"
-
-Scheduling elements include: appointment booking, timing, availability, office hours, scheduling, canceling, rescheduling
-General elements include: insurance, policies, procedures, health conditions, costs, locations, patient eligibility (out-of-state patients, travel questions), COVID, illness
-
-Respond with only "YES" if it contains BOTH elements, or "NO" if it contains only one type or neither.
-
-Examples:
-- "Can I get appointment tomorrow if I don't have insurance?" → YES (appointment + insurance)
-- "Can I cancel my appointment if I test positive for COVID?" → YES (cancel appointment + COVID)
-- "What are your office hours?" → NO (only scheduling)
-- "Do you accept my insurance?" → NO (only general)
-
-Answer:"""
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": mixed_detection_prompt}],
-                temperature=0.1,
-                max_tokens=10
-            )
-            
-            result = response.choices[0].message.content.strip().upper()
-            is_mixed = result == "YES"
-            
-            # Debug logging
-            print(f"Question: {user_question}")
-            print(f"AI Mixed Detection: {result}")
-            print(f"Is mixed: {is_mixed}")
-            
-            return is_mixed
-            
-        except Exception as e:
-            print(f"Error in mixed query detection: {e}")
-            # Fallback to simple keyword detection
-            q = user_question.lower()
-            has_scheduling = any(word in q for word in ['appointment', 'schedule', 'cancel', 'reschedule'])
-            has_general = any(word in q for word in ['insurance', 'covid', 'cost', 'policy', 'state', 'out-of-state', 'travel', 'location', 'eligibility'])
-            return has_scheduling and has_general
-    
-    def extract_general_intent(self, user_question: str) -> str:
-        """AI-powered extraction of general intent from mixed query"""
-        try:
-            intent_prompt = f"""
-Extract ONLY the general dental information request from this mixed question. Ignore scheduling/appointment parts.
-
-Question: "{user_question}"
-
-Focus on:
-- Medical conditions (cavity, pain, etc.)
-- Policies (insurance, COVID, etc.) 
-- General information (procedures, costs, etc.)
-- Patient eligibility questions (out-of-state patients, travel from other states)
-- Location and accessibility questions
-
-Ignore:
-- Appointment timing
-- Office hours
-- Scheduling requests
-
-Rephrase as a simple general question. If no general component exists, respond with "NONE".
-
-Examples:
-- "Can I get appointment tomorrow if I have cavity?" → "Cavities are holes in teeth caused by bacteria. Dr. Tomar treats them with fillings, crowns, or other procedures depending on severity."
-- "Do you accept insurance for root canal?" → "Yes, Dr. Tomar accepts most major insurance plans including UHC, Aetna, Delta Dental, and MetLife."
-- "Can I see Dr. Tomar if I live in another state?" → "Can patients from other states visit Dr. Tomar?"
-- "Do you see out-of-state patients?" → "Does Dr. Tomar accept patients from other states?"
-- "What are your office hours?" → "NONE"
-
-General question:"""
-            
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": intent_prompt}],
-                temperature=0.1,
-                max_tokens=50
-            )
-            
-            result = response.choices[0].message.content.strip()
-            return result if result != "NONE" else ""
-            
-        except Exception as e:
-            print(f"Error in general intent extraction: {e}")
-            return ""
-    
-    def get_hybrid_response(self, user_question: str, context: str = "") -> AgentResponse:
-        """Generate combined response from scheduling and general agents"""
-        
-        # Get scheduling response
-        scheduling_agent = self.agents[AgentType.SCHEDULING]
-        scheduling_response = scheduling_agent.process_scheduling_query(user_question, context)
-        
-        # Extract general intent using AI
-        general_question = self.extract_general_intent(user_question)
-        general_content = ""
-        
-        if general_question:
-            general_agent = self.agents[AgentType.GENERAL]
-            try:
-                rag_context, _ = self.rag_pipeline.retrieve_and_rank(general_question)
-            except:
-                rag_context = ""
-            
-            # Use extracted general question with explicit instruction
-            focused_prompt = f"Answer this general dental question. Do not include scheduling, appointment, or office hours information: {general_question}"
-            general_response = general_agent.process_query(focused_prompt, rag_context, QueryType.GENERAL)
-            general_content = general_response.content
-        
-        # Combine responses
-        combined_content = self.combine_responses(scheduling_response.content, general_content, user_question)
-        
-        return AgentResponse(
-            content=combined_content,
-            confidence=scheduling_response.confidence,
-            agent_type=AgentType.SCHEDULING,
-            reasoning_steps=scheduling_response.reasoning_steps,
-            quality_score=scheduling_response.quality_score,
-            attempts_used=scheduling_response.attempts_used
-        )
-    
-    def combine_responses(self, scheduling_content: str, general_content: str, user_question: str) -> str:
-        """Intelligently combine scheduling and general responses"""
-        
-        # Use actual general agent response if available
-        if general_content and len(general_content.strip()) > 10:
-            # Clean general content by removing scheduling-related information
-            lines = [line.strip() for line in general_content.split('\n') if line.strip()]
-            cleaned_lines = []
-            
-            for line in lines:
-                # Skip lines with scheduling keywords
-                if not any(word in line.lower() for word in [
-                    'call', 'phone', 'schedule', 'appointment', 'office hours', 
-                    '775-5162', 'contact', 'reach us', 'available', 'open', 'closed'
-                ]):
-                    # Replace specific prices with generic cost guidance
-                    if any(price_indicator in line.lower() for price_indicator in ['$', 'ranges from', 'generally ranges', 'typically costs']):
-                        line = "Costs vary depending on the specific service and individual needs. For accurate pricing, please contact Dr. Tomar's office at (425) 775-5162."
-                    cleaned_lines.append(line)
-            
-            if cleaned_lines:
-                general_info = '\n'.join(cleaned_lines[:3])  # Take first 3 relevant lines
-                return f"{general_info}\n\n**Scheduling Information:**\n{scheduling_content}"
-        
-        # Fallback to scheduling only if no general content
-        return scheduling_content
     
     def route_query(self, user_question: str, context: str = "") -> AgentResponse:
         """Route query to appropriate specialist agent"""
@@ -947,10 +934,6 @@ General question:"""
                 quality_score=100.0,
                 attempts_used=1
             )
-        
-        # Check for mixed queries first
-        if self.is_mixed_query(user_question):
-            return self.get_hybrid_response(user_question, context)
         
         # AI-powered query classification
         query_type = self.query_classifier.classify_query(user_question, self.client)
