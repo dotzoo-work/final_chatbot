@@ -708,11 +708,7 @@ Patient Question: "{user_question}"
 Detected Intent: {intent}
 Intent-Based Response: "{intent_response}"
 
-office Details:
-- Dr. Meenakshi Tomar's Dental Office
-- Phone: (425) 775-5162
-- Hours: Monday, Tuesday, Thursday (7 AM - 6 PM)
-- Closed: Wednesday, Friday, Weekends
+
 
 CRITICAL Instructions:
 1. Use the Intent-Based Response as your main answer
@@ -723,13 +719,7 @@ CRITICAL Instructions:
 6. DO NOT mention current time in response
 7. Make the response sound natural and conversational
 
-Guidelines:
 
-
-
-4. Provide clear office status and contact information
-5. Use professional but urgent tone
-6. Keep response focused and actionable
 
 Generate the final response using the intent-based answer:"""
 
