@@ -387,46 +387,8 @@ class EmergencyAgent(BaseAgent):
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
     
     def generate_intelligent_emergency_response(self, user_question: str, intent: str, time_info: Dict) -> str:
-        """Generate intelligent emergency responses based on user question and situation"""
-        try:
-            advice = self.get_emergency_advice(user_question)
-            
-            prompt = f"""
-You are Dr. Meenakshi Tomar's emergency dental assistant. Generate a professional, urgent response to the patient's emergency question.
-
-Patient Emergency: "{user_question}"
-Intent: {intent}
-Current Time Info: {time_info}
-Emergency Care Instructions: {advice}
-
-Office Details:
-- Dr. Meenakshi Tomar's Dental Office
-- Phone: (425) 775-5162
-- Hours: Monday, Tuesday, Thursday (7 AM - 6 PM)
-- Closed: Wednesday, Friday, Weekends
-
-Guidelines:
-1. Show urgency and empathy for dental emergency
-2. Address the specific emergency situation
-3. Include relevant emergency care instructions
-4. Provide clear office status and contact information
-5. Use professional but urgent tone
-6. Keep response focused and actionable
-
-Generate an emergency response:"""
-
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-                temperature=0.7
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            logger.error(f"Error generating intelligent emergency response: {e}")
-            return self.generate_basic_emergency_response(intent, time_info, user_question)
+        """Generate emergency responses based on intent only"""
+        return self.generate_emergency_response(intent, time_info, user_question)
     
     def generate_basic_emergency_response(self, intent: str, time_info: Dict, user_question: str) -> str:
         """Fallback emergency response when AI generation fails"""
@@ -506,6 +468,8 @@ class SchedulingAgent(BaseAgent):
             return 'tomorrow_request'
         elif any(phrase in q for phrase in ['can you see me', 'see me']):
             return 'see_me_request'
+        elif any(phrase in q for phrase in ['weekend', 'saturday', 'sunday', 'weekends']):
+            return 'weekend_inquiry'
         elif any(word in q for word in ['hours', 'open', 'close']):
             return 'hours_inquiry'
         elif any(word in q for word in ['cancel', 'reschedule','modified', 'change']):
@@ -680,6 +644,13 @@ class SchedulingAgent(BaseAgent):
         "We’re happy to confirm whether your plan is accepted."
     )
 
+        elif intent == 'weekend_inquiry':
+         return (
+        "Unfortunately, Dr. Tomar's office is closed on weekends (Saturday and Sunday). "
+        "We're open Monday, Tuesday, and Thursday from 7 AM to 6 PM.\n\n"
+        "📞 Please call (425) 775-5162 to schedule your appointment during our open days."
+    )
+
         elif intent == 'tomorrow_request':
             if is_tomorrow_open:
                 return (
@@ -722,52 +693,58 @@ class SchedulingAgent(BaseAgent):
                 )
     def generate_intelligent_response(self, user_question: str, intent: str, time_info: dict) -> str:
         """Generate intelligent, context-aware responses based on user question and current situation"""
+        # First detect intent if not provided
+        if not intent:
+            intent = self.detect_scheduling_intent(user_question)
+        
         try:
-            # Create context-aware prompt for AI response generation
+            # Get intent-based response first
+            intent_response = self.generate_response(intent, time_info)
+            
             prompt = f"""
-You are Dr. Meenakshi Tomar's Virtual assistant. Generate a professional, helpful response to the patient's question.
+You are Dr. Meenakshi Tomar's Virtual assistant. Use the provided intent-based response as your base answer.
 
 Patient Question: "{user_question}"
-Intent: {intent}
-Current Time Info: {time_info}
+Detected Intent: {intent}
+Intent-Based Response: "{intent_response}"
 
-Office Details:
+office Details:
 - Dr. Meenakshi Tomar's Dental Office
 - Phone: (425) 775-5162
 - Hours: Monday, Tuesday, Thursday (7 AM - 6 PM)
 - Closed: Wednesday, Friday, Weekends
-- Second Location: Pacific Highway Dental, Kent, WA (253) 529-9434
 
-IMPORTANT Messaging Guidelines:
-1. Only mention you are a virtual assistant when user asks for scheduling appointments
-2. Explain that the scheduling team will book appointments when available
-3. Never say "we'll be happy to assist" - instead say "our scheduling team will assist when available"
-4. Use proper formatting with bullet points and clear sections
-5. Address the specific question asked
-6. Include relevant office hours/status based on current time
-7. Always provide phone number for scheduling
-8. Use appropriate tone for the situation
+CRITICAL Instructions:
+1. Use the Intent-Based Response as your main answer
+2. DO NOT create a new response from scratch if available in intent . create if needed.
+3. Only improve formatting and make it more natural
+4. Keep all office hours, phone numbers, and status information exactly as provided
+5. DO NOT add greetings like "Hello" or "Thank you"
+6. DO NOT mention current time in response
+7. Make the response sound natural and conversational
 
-Formatting Requirements:
-- Use bullet points (•) for office hours and key information
-- Use **bold** for important sections like "Office Status" or "Next Steps"
-- Keep information well-aligned and easy to read
-- Use line breaks for better readability
+Guidelines:
 
-Generate a well-formatted, contextual response:"""
+
+
+4. Provide clear office status and contact information
+5. Use professional but urgent tone
+6. Keep response focused and actionable
+
+Generate the final response using the intent-based answer:"""
 
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=300,
-                temperature=0.7
+                temperature=0.5
             )
             
             return response.choices[0].message.content.strip()
             
         except Exception as e:
-            # Fallback to basic response
-            return self.generate_basic_response(intent, time_info)
+            # Fallback to intent-based response directly
+            return intent_response
     
     def generate_basic_response(self, intent: str, time_info: dict) -> str:
         """Fallback method for basic responses when AI generation fails"""
