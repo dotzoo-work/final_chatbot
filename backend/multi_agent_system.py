@@ -370,20 +370,20 @@ class EmergencyAgent(BaseAgent):
                 return f"Yes, Dr. Tomar can see you for emergency tomorrow ({tomorrow_day}) 7 AM-6 PM. Call: (425) 775-5162 to schedule emergency appointment."
             else:
                 next_after_tomorrow = self.get_next_open_day(tomorrow_day)
-                base_response = f"Dr. Tomar's office is closed tomorrow ({tomorrow_day}). Emergency care: Call (425) 775-5162. Next open: {next_after_tomorrow} 7 AM-6 PM."
+                base_response = f"Dr. Tomar's office is closed tomorrow ({tomorrow_day})\n.Emergency Care: Please call (425) 775-5162 for immediate assistance\n\n.The next available day is: {next_after_tomorrow} 7 AM-6 PM."
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
         
         else:  # today_emergency
             if not is_open_day:
-                base_response = f"Dr. Tomar's office is closed today ({current_day}). Emergency care: Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
+                base_response = f"Dr. Tomar's office is closed today ({current_day})\n.Emergency Care: Please call (425) 775-5162 for immediate assistance\n\n.The next available day is: {next_open} 7 AM-6 PM."
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
             elif is_open:
                 return "Dr. Tomar's office is currently open for emergency appointments.I’m unable to schedule your appointment directly, but our Scheduling Team can assist you with availability for same-day appointments. \n\n**Status:**\n\n• Open until 6 PM today.\n please Call us at : (425) 775-5162 to schedule your appointment"
             elif hour < 7:
-                base_response = f"Currently closed but we open today at 7 AM to 6 PM for emergency care. Call: (425) 775-5162."
+                base_response = f"Currently closed but we open today at 7 AM to 6 PM for emergency care. Call: (425) 775-5162 fot book your appointment"
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
             else:  # hour >= 18
-                base_response = f"Currently closed (after 6 PM). Emergency care: Call (425) 775-5162. Next open: {next_open} 7 AM-6 PM."
+                base_response = f"Currently closed (after 6 PM)\n.Emergency Care: Please call (425) 775-5162 for immediate assistance\n\n.The next available day is: {next_open} 7 AM-6 PM."
                 return base_response + (f"\n\n**Immediate Care Instructions:**\n\n{advice}" if advice else "")
     
     def generate_intelligent_emergency_response(self, user_question: str, intent: str, time_info: Dict) -> str:
