@@ -692,34 +692,39 @@ class SchedulingAgent(BaseAgent):
                     "📞 Please call (425) 775-5162 to schedule your appointment."
                 )
     def generate_intelligent_response(self, user_question: str, intent: str, time_info: dict) -> str:
-        """Generate intelligent, context-aware responses based on user question and current situation"""
-        # First detect intent if not provided
-        if not intent:
-            intent = self.detect_scheduling_intent(user_question)
+        """Smart routing: Known intents = Fast, Unknown = AI Intelligence"""
         
-        try:
-            # Get intent-based response first
+        # Define known scheduling intents that have specific logic
+        known_intents = [
+            'same_day_request', 'tomorrow_request', 'hours_inquiry',
+            'modify_appointment', 'cost_inquiry', 'insurance_inquiry', 
+            'weekend_inquiry', 'see_me_request'
+        ]
+        
+        if intent in known_intents:
+            # Fast path: Use existing intent-based logic
             intent_response = self.generate_response(intent, time_info)
-            
+            return self._improve_intent_response(user_question, intent_response)
+        else:
+            # Smart path: AI handles unknown scheduling questions
+            return self._generate_ai_scheduling_response(user_question, time_info)
+
+    def _improve_intent_response(self, user_question: str, intent_response: str) -> str:
+        """Improve existing intent responses to make them more natural"""
+        try:
             prompt = f"""
 You are Dr. Meenakshi Tomar's Virtual assistant. Use the provided intent-based response as your base answer.
 
 Patient Question: "{user_question}"
-Detected Intent: {intent}
 Intent-Based Response: "{intent_response}"
-
-
 
 CRITICAL Instructions:
 1. Use the Intent-Based Response as your main answer
-2. DO NOT create a new response from scratch if available in intent . create if needed.
-3. Only improve formatting and make it more natural
-4. Keep all office hours, phone numbers, and status information exactly as provided
-5. DO NOT add greetings like "Hello" or "Thank you"
-6. DO NOT mention current time in response
-7. Make the response sound natural and conversational
-
-
+2. Only improve formatting and make it more natural
+3. Keep all office hours, phone numbers, and status information exactly as provided
+4. DO NOT add greetings like "Hello" or "Thank you"
+5. DO NOT mention current time in response
+6. Make the response sound natural and conversational
 
 Generate the final response using the intent-based answer:"""
 
@@ -731,37 +736,127 @@ Generate the final response using the intent-based answer:"""
             )
             
             return response.choices[0].message.content.strip()
-            
+        
         except Exception as e:
             # Fallback to intent-based response directly
             return intent_response
-    
-    def generate_basic_response(self, intent: str, time_info: dict) -> str:
-        """Fallback method for basic responses when AI generation fails"""
+
+    def _generate_ai_scheduling_response(self, user_question: str, time_info: dict) -> str:
+        """AI-powered response for scheduling questions not covered by intents"""
+        
         current_day = time_info['current_day']
         hour = time_info['hour']
         is_open_day = current_day in ['Monday', 'Tuesday', 'Thursday']
         is_office_hours = 7 <= hour < 18
         is_open = is_open_day and is_office_hours
         next_open = self.get_next_open_day(current_day)
-
+        
+        # Build office status message
         if not is_open_day:
-            return (
-                f"I'm a virtual assistant for Dr. Tomar's office. Our office is closed today ({current_day}). "
-                f"We'll reopen on {next_open} from 7 AM to 6 PM. Our scheduling team will assist when available. "
-                "📞 Please call (425) 775-5162 for appointments."
-            )
+            office_status = f"CLOSED today ({current_day}). Next open: {next_open}"
         elif is_open:
+            office_status = f"OPEN until 6 PM today ({current_day})"
+        elif hour < 7:
+            office_status = f"CLOSED now, opens today at 7 AM ({current_day})"  # Same day opening
+        else:
+            office_status = f"CLOSED for today (after 6 PM). Next open: {next_open}"
+        
+        try:
+            prompt = f"""
+You are Dr. Meenakshi Tomar's virtual assistant. Answer this scheduling-related question professionally.
+
+Patient Question: "{user_question}"
+
+CURRENT OFFICE STATUS: {office_status}
+
+OFFICE SCHEDULE:
+- Open Days: Monday, Tuesday, Thursday (7 AM - 6 PM)
+- Closed: Wednesday, Friday, Saturday, Sunday
+- Today is: {current_day}
+- Current time: {hour}:00 (24-hour format)
+- Next open day: {next_open}
+
+CRITICAL SCHEDULING RULES:
+1. IMPORTANT: You CANNOT book appointments directly - only the scheduling team can book appointments
+2. Always mention "I'm unable to schedule appointments directly, but our scheduling team can assist you"
+3. For same-day appointment requests:
+   - If today is CLOSED DAY (Wed/Fri/Weekend) → Say office is closed today, scheduling team available on {next_open}
+   - If today is OPEN DAY but AFTER HOURS (after 6 PM) → Say closed for today, scheduling team available on {next_open}
+   - If today is OPEN DAY and DURING HOURS (7 AM - 6 PM) → Say office is open, scheduling team available now
+   - If today is OPEN DAY but BEFORE HOURS (before 7 AM) → Say opens today at 7 AM, scheduling team available then
+
+4. For general questions (new patients, services, etc.):
+   - Answer the question directly
+   - Include relevant office information
+   - Always mention scheduling team for appointments
+
+OFFICE INFORMATION:
+- Phone: (425) 775-5162
+- We accept new patients
+- We accept most major insurance plans
+- Emergency appointments available
+- Scheduling team handles all appointment bookings
+- Second location: Pacific Highway Dental, Kent, WA
+
+RESPONSE FORMATTING RULES:
+- ALWAYS use line breaks (\n) to separate different parts of your response
+- Put office status information on separate lines
+- Add blank line (\n\n) before phone number for emphasis
+- Break long sentences into multiple lines for better readability
+- Use proper spacing between different topics
+
+RESPONSE RULES:
+- Always clarify you cannot book appointments directly
+- Mention scheduling team availability based on office hours
+- Always include phone number (425) 775-5162
+- Be specific about office status when relevant
+- IMPORTANT: If today is open day but before hours, mention "opens today at 7 AM" NOT next day
+- Only mention next open day when today is completely closed (closed day or after hours)
+- Don't mention current time explicitly in response
+- Be professional and helpful
+
+EXAMPLE RESPONSES WITH PROPER FORMATTING:
+- "Yes, we accept new patients!\n\nI'm unable to schedule appointments directly, but our scheduling team can assist you.\n\n📞 Please call (425) 775-5162 to book your appointment."
+- "Our office is currently open until 6 PM.\n\nI'm unable to schedule appointments directly, but our scheduling team is available now.\n\n📞 Please call (425) 775-5162 to book your appointment."
+- "Our office is closed today ({current_day}).\n\nI'm unable to schedule appointments directly, but our scheduling team will be available on {next_open} from 7 AM to 6 PM.\n\n📞 Please call (425) 775-5162 to book your appointment."
+- "Our office opens today at 7 AM.\n\nI'm unable to schedule appointments directly, but our scheduling team will be available once we open.\n\n📞 Please call (425) 775-5162 to book your appointment."
+
+IMPORTANT: Format your response with proper line breaks (\n) and spacing for better user visibility. Separate different information into new lines.
+
+Generate response:"""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=300
+            )
+            
+            return response.choices[0].message.content.strip()
+        
+        except Exception as e:
+            # Fallback to existing logic
+            return self._generate_fallback_response(user_question, time_info)
+
+    def _generate_fallback_response(self, user_question: str, time_info: dict) -> str:
+        """Fallback response when AI fails"""
+        current_day = time_info['current_day']
+        hour = time_info['hour']
+        is_open_day = current_day in ['Monday', 'Tuesday', 'Thursday']
+        is_office_hours = 7 <= hour < 18
+        is_open = is_open_day and is_office_hours
+        
+        if is_open:
             return (
-                "I'm a virtual assistant for Dr. Tomar's office. We're currently open until 6 PM today. "
-                "Our scheduling team will assist when available. "
-                "📞 Please call (425) 775-5162 to schedule your appointment."
+                "I'm Dr. Tomar's virtual assistant. Our office is currently open until 6 PM. "
+                "For specific scheduling questions, please call (425) 775-5162 and our team will assist you."
             )
         else:
+            next_open = self.get_next_open_day(current_day)
             return (
-                f"I'm a virtual assistant for Dr. Tomar's office. Our office has closed for the day. "
-                f"We'll reopen on {next_open} from 7 AM to 6 PM. Our scheduling team will assist when available. "
-                "📞 Please call (425) 775-5162 for appointments."
+                f"I'm Dr. Tomar's virtual assistant. Our office is currently closed. "
+                f"We'll reopen on {next_open} from 7 AM to 6 PM. "
+                "Please call (425) 775-5162 for scheduling assistance."
             )
 
     def process_scheduling_query(self, user_question: str, context: str = "") -> AgentResponse:
@@ -960,3 +1055,6 @@ Respond with only "DENTAL" if it's dental-related or "OUT_OF_CONTEXT" if it's co
 if __name__ == "__main__":
     # This would be integrated into the main application
     pass
+
+
+
