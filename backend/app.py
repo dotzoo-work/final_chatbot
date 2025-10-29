@@ -36,9 +36,15 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+origins = [
+    "https://www.edmondsbaydental.com",  # production domain
+    "http://localhost/myweb",             # React dev server (common)
+              
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://www.edmondsbaydental.com"],  # Allow all origins for deployment
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
