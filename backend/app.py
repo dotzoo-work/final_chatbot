@@ -38,7 +38,7 @@ app = FastAPI(
 # Add CORS middleware
 origins = [
     "https://www.edmondsbaydental.com",  # production domain
-    "http://localhost/myweb",             # React dev server (common)
+     "https://voice.yesitisfree.com",             # React dev server (common)
               
 ]
 
