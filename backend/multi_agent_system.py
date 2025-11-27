@@ -1,6 +1,12 @@
 """
 Multi-Agent System for Specialized Dental Consultation
 Implements different specialist agents for various dental domains
+
+Classifier + RAG Pipeline:
+model = "gpt-4o-mini"
+
+Final Answer Agent:
+model = "gpt-4o-mini"
 """
 
 import os
@@ -8,7 +14,9 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import openai
+from openai import AsyncOpenAI
 from loguru import logger
+import asyncio
 from advanced_prompts import ChainOfThoughtPrompts, QueryClassifier, QueryType
 from quality_checker import RepromptingSystem, ResponseQualityChecker
 from advanced_rag import AdvancedRAGPipeline
@@ -65,6 +73,12 @@ class BaseAgent:
         self.agent_type = agent_type
         self.cot_prompts = ChainOfThoughtPrompts()
         self.reprompting_system = RepromptingSystem(openai_client)
+        # Add async client if available
+        if hasattr(openai_client, 'api_key'):
+            from openai import AsyncOpenAI
+            self.async_client = AsyncOpenAI(api_key=openai_client.api_key)
+        else:
+            self.async_client = None
         
     def get_specialist_persona(self) -> str:
         """Get specialized persona for this agent type"""
@@ -73,6 +87,8 @@ class BaseAgent:
         specializations = {
             AgentType.DIAGNOSTIC: """
 DIAGNOSTIC SPECIALIZATION:
+You must always reply in the same language as the user's message.
+Auto-detect the user's language and generate the response in that language only.
 - Dr. Tomar is expert in symptom analysis and differential diagnosis
 - Dr. Tomar is skilled in identifying urgent vs non-urgent conditions
 - Dr. Tomar is experienced in pain assessment and oral pathology
@@ -80,6 +96,8 @@ DIAGNOSTIC SPECIALIZATION:
 """,
             AgentType.TREATMENT: """
 TREATMENT SPECIALIZATION:
+You must always reply in the same language as the user's message.
+Auto-detect the user's language and generate the response in that language only.
 - Dr. Tomar is expert in comprehensive treatment planning
 - Dr. Tomar is skilled in explaining complex procedures clearly
 - Dr. Tomar is experienced in treatment options and alternatives
@@ -87,6 +105,8 @@ TREATMENT SPECIALIZATION:
 """,
             AgentType.PREVENTION: """
 PREVENTION SPECIALIZATION:
+You must always reply in the same language as the user's message.
+Auto-detect the user's language and generate the response in that language only.
 - Dr. Tomar is expert in preventive dentistry and oral hygiene
 - Dr. Tomar is skilled in patient education and behavior modification
 - Dr. Tomar is experienced in risk factor assessment and management
@@ -94,6 +114,8 @@ PREVENTION SPECIALIZATION:
 """,
             AgentType.EMERGENCY: """
 EMERGENCY SPECIALIZATION:
+You must always reply in the same language as the user's message.
+Auto-detect the user's language and generate the response in that language only.
 - Dr. Tomar is expert in dental emergency assessment and triage
 - Dr. Tomar is skilled in pain management and urgent care protocols
 - Dr. Tomar is experienced in trauma and acute condition management
@@ -101,6 +123,8 @@ EMERGENCY SPECIALIZATION:
 """,
             AgentType.SCHEDULING: """
 SCHEDULING SPECIALIZATION:
+You must always reply in the same language as the user's message.
+Auto-detect the user's language and generate the response in that language only.
 - Dr. Tomar's office scheduling expert with real-time availability
 - Expert in appointment booking, office hours, and availability checking
 - Skilled in timezone calculations for Edmonds, Washington (America/Los_Angeles)
@@ -121,6 +145,8 @@ PHONE: (425) 775-5162
 """,
             AgentType.GENERAL: """
 GENERAL CONSULTATION SPECIALIZATION:
+You must always reply in the same language as the user's message.
+Auto-detect the user's language and generate the response in that language only.
 - Dr. Tomar is expert in comprehensive dental care coordination
 - Dr. Tomar is skilled in patient communication and education
 - Dr. Tomar is experienced in holistic oral health assessment
@@ -134,21 +160,18 @@ GENERAL CONSULTATION SPECIALIZATION:
         
         return base_persona + specializations.get(self.agent_type, "")
     
-    def process_query(
+    async def process_query(
         self, 
         user_question: str, 
         context: str = "",
         query_type: QueryType = None,
-        conversation_history: str = ""
+        conversation_history: str = "",
+        detected_lang: str = "English"
     ) -> AgentResponse:
         """Process query with specialized approach"""
         
-        # Map QueryType to AgentType if not already specified
-        if query_type:
-            agent_query_type = query_type
-        else:
-            classifier = QueryClassifier(self.client)
-            agent_query_type = classifier.classify_query(user_question, self.client)
+        # Use pre-classified query type (no duplicate classification)
+        agent_query_type = query_type or QueryType.GENERAL
         
         # Generate specialized prompt with conversation history
         specialist_persona = self.get_specialist_persona()
@@ -156,26 +179,50 @@ GENERAL CONSULTATION SPECIALIZATION:
             agent_query_type, user_question, context, conversation_history
         )
         
-        # Combine specialist persona with chain-of-thought prompt
-        full_prompt = f"{specialist_persona}\n\n{cot_prompt}"
+        # Combine with LANGUAGE FIRST - most important instruction
+        if detected_lang.lower() != "english":
+            language_instruction = f"CRITICAL: User wrote in {detected_lang}. You MUST respond in {detected_lang} ONLY. Do NOT use English."
+        else:
+            language_instruction = "Respond in English as requested."
         
-        # Generate initial response
+        # Add instruction to not repeat the question
+        no_repeat_instruction = "IMPORTANT: Do NOT repeat or restate the user's question in your response. Start directly with your answer."
+        
+        full_prompt = f"{language_instruction}\n\n{no_repeat_instruction}\n\n{specialist_persona}\n\n{cot_prompt}"
+        logger.info(f"🎯 Language instruction: {language_instruction}")
+        
+        # STREAMING MODE: Ultra fast response
         try:
-            response = self.client.chat.completions.create(
+            stream = await self.async_client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": full_prompt}],
-                temperature=0.7,
-                max_tokens=1500
+                messages=[
+                    {"role": "system", "content": f"You MUST respond in {detected_lang}. This is mandatory."},
+                    {"role": "user", "content": full_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=800,
+                timeout=10,
+                stream=True  # Enable streaming
             )
-            initial_response = response.choices[0].message.content
+            
+            # Collect streaming response
+            initial_response = ""
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    initial_response += chunk.choices[0].delta.content
             
             # Clean initial response first
             initial_response = self._remove_meta_commentary(initial_response)
             
-            # Improve response through reprompting
-            final_response, attempts, quality_scores = self.reprompting_system.improve_response_with_reprompting(
-                full_prompt, user_question, initial_response, context
-            )
+            # Improve response through reprompting - DISABLED for speed optimization
+            # final_response, attempts, quality_scores = self.reprompting_system.improve_response_with_reprompting(
+            #     full_prompt, user_question, initial_response, context
+            # )
+            
+            # Direct response for speed (3-5 sec faster)
+            final_response = initial_response
+            attempts = 1
+            quality_scores = []
             
             # Extract reasoning steps (simplified)
             reasoning_steps = self._extract_reasoning_steps(final_response)
@@ -407,19 +454,49 @@ class EmergencyAgent(BaseAgent):
         
         return base_response + (f"\n\n**Immediate Care:**\n{advice}" if advice else "")
 
-    def process_emergency_query(self, user_question: str, context: str = "") -> AgentResponse:
+    async def process_emergency_query_async(self, user_question: str, context: str = "", detected_lang: str = "English") -> AgentResponse:
+        """Async version of emergency query processing"""
+        
+        # If language not detected, detect it here
+        if detected_lang == "English" and self.async_client:
+            try:
+                lang_response = await self.async_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Detect language. Reply only: English, Hindi, Spanish, etc."},
+                        {"role": "user", "content": user_question}
+                    ],
+                    temperature=0.1,
+                    max_tokens=10
+                )
+                detected_lang = lang_response.choices[0].message.content.strip()
+                logger.info(f"⚡ Emergency Agent Language Detection: {detected_lang}")
+            except Exception as e:
+                logger.warning(f"Language detection in emergency agent failed: {e}")
+                detected_lang = "English"
+        
+        return self.process_emergency_query(user_question, context, detected_lang)
+    
+    def process_emergency_query(self, user_question: str, context: str = "", detected_lang: str = "English") -> AgentResponse:
         """Process emergency queries with intelligent responses"""
         
         # Get time info and detect intent
         time_info = self.get_current_time_info()
         intent = self.detect_emergency_intent(user_question)
+        
+        # Generate emergency response with language consideration
         content = self.generate_intelligent_emergency_response(user_question, intent, time_info)
+        
+        # If non-English language detected, add language instruction
+        if detected_lang.lower() != "english":
+            logger.info(f"🌍 Emergency response in {detected_lang}")
+            # The AI will handle language in the response generation
         
         return AgentResponse(
             content=content,
             confidence=0.95,
             agent_type=AgentType.EMERGENCY,
-            reasoning_steps=[f"Emergency intent: {intent}", f"Day: {time_info['current_day']}"],
+            reasoning_steps=[f"Emergency intent: {intent}", f"Day: {time_info['current_day']}", f"Language: {detected_lang}"],
             quality_score=95.0,
             attempts_used=1
         )
@@ -464,13 +541,13 @@ class SchedulingAgent(BaseAgent):
         
         if any(word in q for word in ['today', 'same day', 'aaj']):
             return 'same_day_request'
-        elif any(word in q for word in ['tomorrow', 'next']):
+        elif any(word in q for word in ['tomorrow', 'next',"kl","kal","khule ho","open ho"]):
             return 'tomorrow_request'
         elif any(phrase in q for phrase in ['can you see me', 'see me']):
             return 'see_me_request'
         elif any(phrase in q for phrase in ['weekend', 'saturday', 'sunday', 'weekends']):
             return 'weekend_inquiry'
-        elif any(word in q for word in ['hours', 'open', 'close']):
+        elif any(word in q for word in ['hours', 'open', 'close', 'khule', 'band']):
             return 'hours_inquiry'
         elif any(word in q for word in ['cancel', 'reschedule','modified', 'change']):
             return 'modify_appointment'
@@ -478,6 +555,8 @@ class SchedulingAgent(BaseAgent):
             return 'cost_inquiry'
         elif any(word in q for word in ['insurance', 'coverage']):
             return 'insurance_inquiry'
+        elif any(phrase in q for phrase in ['mil sakti hai', 'le sakta hun', 'book kar sakte hain', 'appointment']):
+            return 'schedule_request'
         else:
             return 'schedule_request'
     
@@ -691,28 +770,30 @@ class SchedulingAgent(BaseAgent):
                     f"The next available day is {next_open}, from 7 AM to 6 PM.\n\n"
                     "📞 Please call (425) 775-5162 to schedule your appointment."
                 )
-    def generate_intelligent_response(self, user_question: str, intent: str, time_info: dict) -> str:
+    async def generate_intelligent_response(self, user_question: str, intent: str, time_info: dict, detected_lang: str = "English") -> str:
         """Smart routing: Known intents = Fast, Unknown = AI Intelligence"""
         
         # Define known scheduling intents that have specific logic
         known_intents = [
             'same_day_request', 'tomorrow_request', 'hours_inquiry',
             'modify_appointment', 'cost_inquiry', 'insurance_inquiry', 
-            'weekend_inquiry', 'see_me_request'
+            'weekend_inquiry', 'see_me_request', 'schedule_request'
         ]
         
         if intent in known_intents:
             # Fast path: Use existing intent-based logic
             intent_response = self.generate_response(intent, time_info)
-            return self._improve_intent_response(user_question, intent_response)
+            return await self._improve_intent_response(user_question, intent_response, detected_lang)
         else:
             # Smart path: AI handles unknown scheduling questions
-            return self._generate_ai_scheduling_response(user_question, time_info)
+            return await self._generate_ai_scheduling_response(user_question, time_info, detected_lang)
 
-    def _improve_intent_response(self, user_question: str, intent_response: str) -> str:
+    async def _improve_intent_response(self, user_question: str, intent_response: str, detected_lang: str = "English") -> str:
         """Improve existing intent responses to make them more natural"""
         try:
             prompt = f"""
+MANDATORY: User asked in {detected_lang}. You MUST respond ONLY in {detected_lang}. DO NOT use English.
+
 You are Dr. Meenakshi Tomar's Virtual assistant. Use the provided intent-based response as your base answer.
 
 Patient Question: "{user_question}"
@@ -728,20 +809,31 @@ CRITICAL Instructions:
 
 Generate the final response using the intent-based answer:"""
 
-            response = self.client.chat.completions.create(
+            # STREAMING MODE for scheduling
+            stream = await self.async_client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": f"You MUST respond in {detected_lang}. This is mandatory."},
+                    {"role": "user", "content": prompt}
+                ],
                 max_tokens=300,
-                temperature=0.5
+                temperature=0.5,
+                stream=True
             )
             
-            return response.choices[0].message.content.strip()
+            # Collect streaming response
+            response_text = ""
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    response_text += chunk.choices[0].delta.content
+            
+            return response_text.strip()
         
         except Exception as e:
             # Fallback to intent-based response directly
             return intent_response
 
-    def _generate_ai_scheduling_response(self, user_question: str, time_info: dict) -> str:
+    async def _generate_ai_scheduling_response(self, user_question: str, time_info: dict, detected_lang: str = "English") -> str:
         """AI-powered response for scheduling questions not covered by intents"""
         
         current_day = time_info['current_day']
@@ -763,6 +855,8 @@ Generate the final response using the intent-based answer:"""
         
         try:
             prompt = f"""
+MANDATORY: User asked in {detected_lang}. You MUST respond ONLY in {detected_lang}. DO NOT use English.
+
 You are Dr. Meenakshi Tomar's virtual assistant. Answer this scheduling-related question professionally.
 
 Patient Question: "{user_question}"
@@ -825,14 +919,25 @@ IMPORTANT: Format your response with proper line breaks (\n) and spacing for bet
 
 Generate response:"""
 
-            response = self.client.chat.completions.create(
+            # STREAMING MODE for AI scheduling
+            stream = await self.async_client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": f"You MUST respond in {detected_lang}. This is mandatory."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.2,
-                max_tokens=300
+                max_tokens=300,
+                stream=True
             )
             
-            return response.choices[0].message.content.strip()
+            # Collect streaming response
+            response_text = ""
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    response_text += chunk.choices[0].delta.content
+            
+            return response_text.strip()
         
         except Exception as e:
             # Fallback to existing logic
@@ -859,7 +964,39 @@ Generate response:"""
                 "Please call (425) 775-5162 for scheduling assistance."
             )
 
-    def process_scheduling_query(self, user_question: str, context: str = "") -> AgentResponse:
+    async def process_scheduling_query_async(
+        self, 
+        user_question: str, 
+        context: str = "", 
+        detected_lang: str = "English"
+    ) -> AgentResponse:
+        """Async version of scheduling query processing"""
+        
+        # If language not detected, detect it here
+        if detected_lang == "English" and self.async_client:
+            try:
+                lang_response = await self.async_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Detect primary language. For mixed languages like 'ky tm silver fillings krte ho', reply with the dominant language (Hindi, English, etc.). Reply only language name."},
+                        {"role": "user", "content": user_question}
+                    ],
+                    temperature=0.1,
+                    max_tokens=10
+                )
+                detected_lang = lang_response.choices[0].message.content.strip()
+                logger.info(f"⚡ Scheduling Agent Language Detection: {detected_lang}")
+            except Exception as e:
+                logger.warning(f"Language detection in scheduling agent failed: {e}")
+                detected_lang = "English"
+        
+        return await self.process_scheduling_query(
+            user_question=user_question,
+            context=context,
+            detected_lang=detected_lang  # FORCE pass language
+        )
+    
+    async def process_scheduling_query(self, user_question: str, context: str = "", detected_lang: str = "English") -> AgentResponse:
         """Process scheduling queries with intelligent responses"""
         
         # Check for location questions
@@ -877,14 +1014,14 @@ Generate response:"""
         time_info = self.get_current_time_info()
         intent = self.detect_scheduling_intent(user_question)
         
-        # Generate intelligent response based on context
-        content = self.generate_intelligent_response(user_question, intent, time_info)
+        # Generate intelligent response based on context with language enforcement
+        content = await self.generate_intelligent_response(user_question, intent, time_info, detected_lang)
         
         return AgentResponse(
             content=content,
             confidence=0.95,
             agent_type=AgentType.SCHEDULING,
-            reasoning_steps=[f"Intent: {intent}", f"Day: {time_info['current_day']}"],
+            reasoning_steps=[f"Intent: {intent}", f"Day: {time_info['current_day']}", f"Language: {detected_lang}"],
             quality_score=95.0,
             attempts_used=1
         )
@@ -894,6 +1031,7 @@ class MultiAgentOrchestrator:
     
     def __init__(self, openai_client, pinecone_api_key: str):
         self.client = openai_client
+        self.async_client = AsyncOpenAI(api_key=openai_client.api_key)
         self.rag_pipeline = AdvancedRAGPipeline(openai_client, pinecone_api_key)
         self.query_classifier = QueryClassifier(openai_client)
         
@@ -909,21 +1047,42 @@ class MultiAgentOrchestrator:
         
         logger.info("Multi-Agent System initialized with all specialist agents")
     
+    def normalize_query(self, query: str) -> str:
+        """Normalize query for consistent caching"""
+        import re
+        
+        # Basic normalization
+        normalized = query.lower().strip()
+        
+        # Remove extra spaces and punctuation
+        normalized = re.sub(r'[?!.]+', '', normalized)
+        normalized = re.sub(r'\s+', ' ', normalized)
+        
+        # Simple plural to singular (basic cases)
+        normalized = re.sub(r'\bimplants\b', 'implant', normalized)
+        normalized = re.sub(r'\bteeth\b', 'tooth', normalized)
+        normalized = re.sub(r'\bcavities\b', 'cavity', normalized)
+        
+        return normalized.strip()
+        
+        # Initialize specialist agents
+        self.agents = {
+            AgentType.DIAGNOSTIC.value: BaseAgent(openai_client, AgentType.DIAGNOSTIC),
+            AgentType.TREATMENT.value: BaseAgent(openai_client, AgentType.TREATMENT),
+            AgentType.PREVENTION.value: BaseAgent(openai_client, AgentType.PREVENTION),
+            AgentType.EMERGENCY: EmergencyAgent(openai_client),
+            AgentType.SCHEDULING: SchedulingAgent(openai_client),
+            AgentType.GENERAL: BaseAgent(openai_client, AgentType.GENERAL)
+        }
+        
+        logger.info("Multi-Agent System initialized with all specialist agents")
+    
     def is_out_of_context(self, user_question: str, context: str = "") -> bool:
-        """Detect if question is completely out of dental context after checking knowledge base"""
+        """Detect if question is completely out of dental context - OPTIMIZED: No additional RAG calls"""
         
-        # First check if we have information in knowledge base or FAQ
-        if context and len(context.strip()) > 50:  # Use pre-retrieved context
+        # FIXED: Use only pre-retrieved context (no duplicate Pinecone calls)
+        if context and len(context.strip()) > 50:
             return False
-        
-        # If no context provided, retrieve it
-        if not context:
-            try:
-                context, _ = self.rag_pipeline.retrieve_and_rank(user_question)
-                if context and len(context.strip()) > 50:  # Meaningful context found
-                    return False
-            except:
-                pass
         
         # Quick check for common out-of-context patterns
         q = user_question.lower().strip()
@@ -983,8 +1142,8 @@ Respond with only "DENTAL" if it's dental-related or "OUT_OF_CONTEXT" if it's co
     
 
     
-    def route_query(self, user_question: str, context: str = "") -> AgentResponse:
-        """Route query to appropriate specialist agent"""
+    async def route_query(self, user_question: str, context: str = "", query_type: QueryType = None, detected_lang: str = "English") -> AgentResponse:
+        """Route query to appropriate specialist agent - OPTIMIZED: No duplicate RAG calls"""
         
         # Check for out-of-context questions first using already retrieved context
         if self.is_out_of_context(user_question, context):
@@ -997,43 +1156,53 @@ Respond with only "DENTAL" if it's dental-related or "OUT_OF_CONTEXT" if it's co
                 attempts_used=1
             )
         
-        # AI-powered query classification
-        query_type = self.query_classifier.classify_query(user_question, self.client)
+        # Use pre-classified query type (no duplicate classification)
+        if not query_type:
+            query_type = QueryType.GENERAL
         
-        # Route to scheduling agent if classified as scheduling
-        if query_type == QueryType.SCHEDULING:
-            scheduling_agent = self.agents[AgentType.SCHEDULING]
-            return scheduling_agent.process_scheduling_query(user_question, context)
-        
-        # Route to emergency agent if classified as emergency
-        if query_type == QueryType.EMERGENCY:
-            emergency_agent = self.agents[AgentType.EMERGENCY]
-            return emergency_agent.process_emergency_query(user_question, context)
-        
-        # Route to appropriate agent
+        # Route to appropriate agent - FIXED: Use already retrieved context
         agent = self.agents.get(query_type.value, self.agents[AgentType.GENERAL])
         
-        # Get relevant context from RAG if needed
-        if context:
-            rag_context = context
-        else:
-            try:
-                rag_context, _ = self.rag_pipeline.retrieve_and_rank(user_question)
-            except:
-                rag_context = ""
-        
-        return agent.process_query(user_question, rag_context, query_type)
+        # FIXED: Always use provided context (no duplicate RAG calls)
+        return await agent.process_query(user_question, context, query_type, "", detected_lang)
     
-    def process_consultation(self, user_question: str, conversation_history: str = "") -> AgentResponse:
-        """Main consultation processing with agent orchestration"""
-        
+
+    
+
+    
+    async def process_consultation_async(self, user_question: str, conversation_history: str = "") -> AgentResponse:
+        """ULTRA FAST: RAG cache + Final answer cache"""
         logger.info(f"Processing consultation: {user_question[:50]}...")
+        
+        # STEP 1: Final Answer Cache Check
+        import hashlib, json
+        normalized_query = self.normalize_query(user_question)
+        query_hash = hashlib.md5(normalized_query.encode()).hexdigest()
+        
+        try:
+            redis_client = self.rag_pipeline.redis_client if hasattr(self.rag_pipeline, 'redis_client') else None
+            if redis_client:
+                cached_response = redis_client.get(f"final_answer:{query_hash}")
+                if cached_response:
+                    response_data = json.loads(cached_response)
+                    logger.info("⚡ FINAL ANSWER CACHE HIT - 0ms")
+                    return AgentResponse(
+                        content=response_data["content"],
+                        confidence=response_data["confidence"],
+                        agent_type=AgentType(response_data["agent_type"]),
+                        reasoning_steps=response_data["reasoning_steps"],
+                        quality_score=response_data["quality_score"],
+                        attempts_used=response_data["attempts_used"]
+                    )
+        except Exception as e:
+            logger.debug(f"Final answer cache check failed: {e}")
+            pass
         
         # Check for greeting messages
         greeting_words = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']
         if user_question.lower().strip() in greeting_words:
             return AgentResponse(
-                content="Welcome to Edmonds Bay Dental! How can I help you today?",
+                content="Welcome to Edmonds Bay Dental! How can I help you today!",
                 confidence=1.0,
                 agent_type=AgentType.GENERAL,
                 reasoning_steps=["Detected greeting message"],
@@ -1041,15 +1210,198 @@ Respond with only "DENTAL" if it's dental-related or "OUT_OF_CONTEXT" if it's co
                 attempts_used=1
             )
         
-        # 1. Retrieve relevant context
-        context, retrieved_chunks = self.rag_pipeline.retrieve_and_rank(user_question)
+        import time
+        start_time = time.time()
         
-        # 2. Route to appropriate agent and get response directly
-        response = self.route_query(user_question, context)
+        # 🚀 STEP 1: Query Classification FIRST
+        classify_start = time.time()
+        query_type = await self.query_classifier.classify_query_async(user_question, self.async_client)
+        classify_time = (time.time() - classify_start) * 1000
+        logger.info(f"⚡ Classification: {classify_time:.0f}ms | Type: {query_type.value}")
         
-        logger.info(f"Routed to {response.agent_type.value} agent")
+        # 🚀 STEP 2: Route based on classification
+        if query_type == QueryType.SCHEDULING:
+            logger.info("🔀 SCHEDULING → Direct agent (no cache/context)")
+            
+            # Detect language for scheduling
+            try:
+                lang_response = await self.async_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Detect primary language. For mixed languages like 'ky tm silver fillings krte ho', reply with the dominant language (Hindi, English, etc.). Reply only language name."},
+                        {"role": "user", "content": user_question}
+                    ],
+                    temperature=0.1,
+                    max_tokens=10
+                )
+                detected_lang = lang_response.choices[0].message.content.strip()
+                logger.info(f"⚡ Scheduling Language: {detected_lang}")
+            except Exception as e:
+                detected_lang = "English"
+                logger.warning(f"Language detection failed: {e}")
+            
+            scheduling_agent = self.agents[AgentType.SCHEDULING]
+            response = await scheduling_agent.process_scheduling_query_async(
+                user_question=user_question,
+                context="",  # No context needed
+                detected_lang=detected_lang  # Pass detected language
+            )
+            logger.info("🚫 No caching for scheduling - real-time data")
+            return response
+        
+        # 🚀 STEP 3: For NON-SCHEDULING → Check cache first
+        try:
+            redis_client = self.rag_pipeline.redis_client if hasattr(self.rag_pipeline, 'redis_client') else None
+            if redis_client:
+                import hashlib
+                normalized_query = self.normalize_query(user_question)
+                query_hash = hashlib.md5(normalized_query.encode()).hexdigest()
+                cached_response = redis_client.get(f"complete_response:{query_hash}")
+                if cached_response:
+                    import json
+                    response_data = json.loads(cached_response)
+                    logger.info("⚡ CACHE HIT - 0ms (non-scheduling)")
+                    return AgentResponse(
+                        content=response_data["content"],
+                        confidence=response_data["confidence"],
+                        agent_type=AgentType(response_data["agent_type"]),
+                        reasoning_steps=response_data["reasoning_steps"],
+                        quality_score=response_data["quality_score"],
+                        attempts_used=response_data["attempts_used"]
+                    )
+        except Exception as e:
+            logger.debug(f"Cache check failed: {e}")
+        
+        # 🚀 STEP 4: Cache miss → Check FAQ/Persona
+        faq_match = self.rag_pipeline._check_faq_context(user_question)
+        if faq_match:
+            logger.info("⚡ FAQ HIT - Skipping RAG")
+            # Detect language for FAQ responses
+            try:
+                lang_response = await self.async_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "Detect primary language. For mixed languages like 'dr tomar silver fillings krti hai ky', reply with the dominant language (Hindi, English, etc.). Reply only language name."},
+                        {"role": "user", "content": user_question}
+                    ],
+                    temperature=0.1,
+                    max_tokens=10
+                )
+                detected_lang = lang_response.choices[0].message.content.strip()
+                logger.info(f"⚡ FAQ Language Detection: {detected_lang}")
+            except Exception as e:
+                detected_lang = "English"
+                logger.warning(f"FAQ language detection failed: {e}")
+            
+            general_agent = self.agents[AgentType.GENERAL]
+            response = await general_agent.process_query(
+                user_question, self.rag_pipeline.faq_context, QueryType.GENERAL, "", detected_lang
+            )
+        else:
+            persona_match = self.rag_pipeline._check_persona_context(user_question)
+            if persona_match:
+                logger.info("⚡ PERSONA HIT - Skipping RAG")
+                # Detect language for persona responses
+                try:
+                    lang_response = await self.async_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "Detect primary language. For mixed languages like 'dr tomar silver fillings krti hai ky', reply with the dominant language (Hindi, English, etc.). Reply only language name."},
+                            {"role": "user", "content": user_question}
+                        ],
+                        temperature=0.1,
+                        max_tokens=10
+                    )
+                    detected_lang = lang_response.choices[0].message.content.strip()
+                    logger.info(f"⚡ Persona Language Detection: {detected_lang}")
+                except Exception as e:
+                    detected_lang = "English"
+                    logger.warning(f"Persona language detection failed: {e}")
+                
+                general_agent = self.agents[AgentType.GENERAL]
+                response = await general_agent.process_query(
+                    user_question, persona_match, QueryType.GENERAL, "", detected_lang
+                )
+            else:
+                # 🚀 STEP 5: FAQ/Persona miss → RAG call
+                logger.info("📄 FAQ/Persona MISS - Running RAG")
+                
+                # Parallel: Language + RAG
+                async def language_task():
+                    start = time.time()
+                    response = await self.async_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "Detect primary language. For mixed languages like 'ky tm silver fillings krte ho', reply with the dominant language (Hindi, English, etc.). Reply only language name."},
+                            {"role": "user", "content": user_question}
+                        ],
+                        temperature=0.1,
+                        max_tokens=10
+                    )
+                    logger.info(f"⚡ Language: {(time.time()-start)*1000:.0f}ms")
+                    return response.choices[0].message.content.strip()
+                
+                async def rag_task():
+                    start = time.time()
+                    loop = asyncio.get_event_loop()
+                    context, _ = await loop.run_in_executor(
+                        None,
+                        lambda: self.rag_pipeline.retrieve_and_rank(user_question)
+                    )
+                    rag_time = (time.time() - start) * 1000
+                    logger.info(f"📄 RAG: {rag_time:.0f}ms")
+                    return context
+                
+                # Run Language + RAG in parallel
+                results = await asyncio.gather(language_task(), rag_task(), return_exceptions=True)
+                detected_lang = results[0] if not isinstance(results[0], Exception) else "English"
+                context = results[1] if not isinstance(results[1], Exception) else ""
+                
+                # Route to appropriate agent
+                if query_type == QueryType.EMERGENCY:
+                    logger.info(f"🔀 ROUTE: Emergency → Direct")
+                    emergency_agent = self.agents[AgentType.EMERGENCY]
+                    response = await emergency_agent.process_emergency_query_async(
+                        user_question, "", detected_lang
+                    )
+                    logger.info(f"🌍 Emergency processed in language: {detected_lang}")
+                else:
+                    logger.info(f"🔀 ROUTE: {query_type.value} → Agent")
+                    agent = self.agents.get(query_type.value, self.agents[AgentType.GENERAL])
+                    response = await agent.process_query(
+                        user_question, context, query_type, "", detected_lang
+                    )
+                    logger.info(f"🌍 {query_type.value} processed in language: {detected_lang}")
+
+        
+        total_time = time.time() - start_time
+        logger.info(f"🚀 Total time: {total_time*1000:.0f}ms | Agent: {response.agent_type.value}")
+        
+        # Cache Final Answer (only for non-scheduling)
+        if query_type != QueryType.SCHEDULING:
+            try:
+                redis_client = self.rag_pipeline.redis_client if hasattr(self.rag_pipeline, 'redis_client') else None
+                if redis_client:
+                    response_data = {
+                        "content": response.content,
+                        "confidence": response.confidence,
+                        "agent_type": response.agent_type.value,
+                        "reasoning_steps": response.reasoning_steps,
+                        "quality_score": response.quality_score,
+                        "attempts_used": response.attempts_used
+                    }
+                    redis_client.setex(f"final_answer:{query_hash}", 86400, json.dumps(response_data))
+                    logger.info("💾 FINAL ANSWER CACHED for future queries")
+            except Exception as e:
+                logger.debug(f"Final answer cache save failed: {e}")
         
         return response
+    
+    async def process_consultation(self, user_question: str, conversation_history: str = "") -> AgentResponse:
+        """Main async consultation processing - FastAPI compatible"""
+        return await self.process_consultation_async(user_question, conversation_history)
+    
+
 
 # Example usage
 if __name__ == "__main__":

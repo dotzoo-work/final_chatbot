@@ -6,6 +6,9 @@ Implements sophisticated reasoning patterns for medical queries
 from typing import Dict, List, Optional
 from enum import Enum
 import json
+import asyncio
+from openai import AsyncOpenAI
+
 
 class QueryType(Enum):
     DIAGNOSIS = "diagnosis"
@@ -522,9 +525,14 @@ class QueryClassifier:
     
     def __init__(self, openai_client=None):
         self.client = openai_client
+        if openai_client:
+            self.async_client = AsyncOpenAI(api_key=openai_client.api_key)
     
     def classify_query(self, user_question: str, openai_client=None) -> QueryType:
         """AI-powered query classification"""
+        import time
+        from loguru import logger
+        start_time = time.time()
         
         client = openai_client or self.client
         if not client:
@@ -573,11 +581,74 @@ Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
                 "GENERAL": QueryType.GENERAL
             }
             
+            end_time = time.time()
+            logger.info(f"🤖 Query classification time: {(end_time - start_time)*1000:.0f}ms")
             return type_mapping.get(result, QueryType.GENERAL)
             
         except Exception as e:
             # Fallback to general on error
             return QueryType.GENERAL
+    
+    async def classify_query_async(self, user_question: str, async_client) -> QueryType:
+        """TRUE async query classification with AsyncOpenAI"""
+        import time
+        from loguru import logger
+        start_time = time.time()
+        
+        if not async_client:
+            return QueryType.GENERAL
+        
+        try:
+            classification_prompt = f"""
+Analyze this dental consultation question and classify it into ONE category.
+
+User Question: "{user_question}"
+
+Categories:
+- DIAGNOSIS: Questions about symptoms, pain, problems, "what's wrong", identifying conditions
+- TREATMENT: Questions about fixing problems, treatment options, procedures, "how to treat"
+- PREVENTION: Questions about preventing problems, oral hygiene, care tips, maintenance
+- EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling, "emergency appointment", "need to see doctor today", "urgent care", "emergency"
+- PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
+- SCHEDULING: ONLY appointment booking, timing, availability questions ("book appointment","can you see" , "office hours", "when are you available", "appointment tomorrow", "cancel appointment", "reschedule")
+- COST: Questions about pricing, fees, insurance costs, "how much does it cost"
+- GENERAL: Service questions ("do you do", "do you offer", "do you provide"), definitions, basic dental information, location questions ("another location", "second location"), patient eligibility from any state (" see dr tomar if I live out of state", "do you see patients from other states", "any  location patient visits", "travel from another state", "out of state patients", "patients from different states"), "can you see me" questions. IMPORTANT: Current time questions ("what time is it", "what's the time", "current time", "what is time") should be classified as GENERAL for out-of-context handling
+
+IMPORTANT RULE: Pure scheduling questions should go to SCHEDULING. Mixed questions will be handled separately.
+
+Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
+"""
+            
+            response = await async_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": classification_prompt}],
+                temperature=0.1,
+                max_tokens=20
+            )
+            
+            result = response.choices[0].message.content.strip().upper()
+            
+            # Map result to QueryType
+            type_mapping = {
+                "DIAGNOSIS": QueryType.DIAGNOSIS,
+                "TREATMENT": QueryType.TREATMENT, 
+                "PREVENTION": QueryType.PREVENTION,
+                "EMERGENCY": QueryType.EMERGENCY,
+                "PROCEDURE": QueryType.PROCEDURE,
+                "SCHEDULING": QueryType.SCHEDULING,
+                "COST": QueryType.COST,
+                "GENERAL": QueryType.GENERAL
+            }
+            
+            end_time = time.time()
+            logger.info(f"🤖 Query classification time (TRUE ASYNC): {(end_time - start_time)*1000:.0f}ms")
+            return type_mapping.get(result, QueryType.GENERAL)
+            
+        except Exception as e:
+            logger.error(f"Async classification error: {e}")
+            return QueryType.GENERAL
+    
+
 
 # Example usage and testing
 if __name__ == "__main__":

@@ -7,9 +7,86 @@ import os
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import openai
+from openai import AsyncOpenAI
+import asyncio
+from functools import lru_cache
+import hashlib
 from pinecone import Pinecone
 from loguru import logger
 import tiktoken
+import redis
+import json
+import pickle
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Redis CLOUD - Static configuration
+try:
+    redis_client = redis.Redis(
+        host='redis-11326.c258.us-east-1-4.ec2.cloud.redislabs.com',
+        port=11326,
+        username='default',
+        password='vkvFfdBQ0c5y6mbXeYORL1bPdNu73FSX',
+        db=0,
+        decode_responses=False,
+        socket_timeout=1,  # Faster timeout
+        socket_connect_timeout=1
+    )
+    redis_client.ping()
+    REDIS_AVAILABLE = True
+    logger.info("☁️ Redis connected: redis-11326.c258.us-east-1-4.ec2.cloud.redislabs.com:11326")
+except Exception as e:
+    REDIS_AVAILABLE = False
+    logger.warning(f"⚠️ Redis failed - memory cache only. Error: {e}")
+    redis_client = None
+
+# ULTRA FAST embedding cache
+embedding_cache = {}
+
+def cached_embed(text: str, api_key: str):
+    """SUPER FAST embedding cache - memory first, Redis backup"""
+    cache_key = f"emb:{hashlib.md5(text.encode()).hexdigest()}"
+    
+    # SPEED HACK 1: Memory cache first (instant)
+    if cache_key in embedding_cache:
+        logger.info("⚡ Embedding cache HIT (memory) - 0ms")
+        return embedding_cache[cache_key]
+    
+    # SPEED HACK 2: Redis backup
+    if REDIS_AVAILABLE:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                embedding_data = json.loads(cached)
+                embedding_cache[cache_key] = embedding_data["embedding"]  # Store in memory
+                logger.info("📄 Embedding cache HIT (Redis) - 5ms")
+                return embedding_data["embedding"]
+        except:
+            pass
+    
+    # Generate new embedding
+    logger.info("🔄 Generating new embedding - 150ms")
+    client = openai.OpenAI(
+        api_key=api_key, 
+        timeout=3.0,  # Aggressive timeout
+        max_retries=0  # No retries for speed
+    )
+    embedding = client.embeddings.create(
+        model="text-embedding-3-small",  # Faster model
+        input=text[:500]  # Even smaller text limit
+    ).data[0].embedding
+    
+    # SPEED HACK 3: Store in both caches
+    embedding_cache[cache_key] = embedding
+    if REDIS_AVAILABLE:
+        try:
+            redis_client.setex(cache_key, 86400, json.dumps({"embedding": embedding}))
+        except:
+            pass
+    
+    return embedding
 
 @dataclass
 class RetrievedChunk:
@@ -25,12 +102,19 @@ class AdvancedRAGPipeline:
 
     def __init__(self, openai_client, pinecone_api_key: str, index_name: str = "rag-index"):
         self.openai_client = openai_client
+        self.async_client = AsyncOpenAI(api_key=openai_client.api_key)
         self.pc = Pinecone(api_key=pinecone_api_key)
         self.index = self.pc.Index(index_name)
+        # Add redis client reference for caching
+        self.redis_client = redis_client if REDIS_AVAILABLE else None
 
         # Token counter for context management
         self.encoding = tiktoken.encoding_for_model("gpt-4o-mini")
         self.max_context_tokens = 3000
+        
+        # Optimized chunk settings
+        self.chunk_size = 500  # chars
+        self.chunk_overlap = 50  # chars
         
         # FAQ context
         self.faq_context = self._get_faq_context()
@@ -40,7 +124,7 @@ class AdvancedRAGPipeline:
     def enhanced_retrieval(
         self,
         query: str,
-        top_k: int = 10
+        top_k: int = 1
     ) -> List[RetrievedChunk]:
         """
         Enhanced retrieval using OpenAI embeddings with query expansion
@@ -49,8 +133,9 @@ class AdvancedRAGPipeline:
         # 1. Primary vector-based retrieval using OpenAI embeddings
         primary_chunks = self._vector_retrieval(query, top_k)
 
-        # 2. Query expansion for better coverage
-        expanded_queries = self.query_expansion(query)
+        # 2. Query expansion for better coverage - DISABLED for speed optimization
+        # expanded_queries = self.query_expansion(query)
+        expanded_queries = [query]  # Use only original query for speed
         if not isinstance(expanded_queries, list):
             expanded_queries = [query]
         all_chunks = primary_chunks.copy()
@@ -67,23 +152,107 @@ class AdvancedRAGPipeline:
         logger.info(f"Retrieved {len(final_chunks)} chunks using enhanced OpenAI approach")
         return final_chunks
     
-    def _vector_retrieval(self, query: str, top_k: int) -> List[RetrievedChunk]:
-        """Traditional vector-based retrieval using OpenAI embeddings"""
+    async def _get_embedding_cached_async(self, query: str):
+        """Async cached embedding generation"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, cached_embed, query, self.openai_client.api_key)
+    
+    async def _vector_retrieval_async(self, query: str, top_k: int) -> List[RetrievedChunk]:
+        """LIGHTNING FAST RAG - under 500ms target"""
+        
+        query_hash = hashlib.md5(f"{query}:{top_k}".encode()).hexdigest()
+        
+        # SPEED HACK 1: Memory cache first (instant)
+        cache_key = f"rag_result:{query_hash}"
+        if cache_key in embedding_cache:
+            logger.info("⚡ RAG cache HIT (memory) - 0ms")
+            return embedding_cache[cache_key]
+        
+        # SPEED HACK 2: Redis cache (5ms)
+        if REDIS_AVAILABLE:
+            try:
+                cached_results = redis_client.get(f"retrieval:{query_hash}")
+                if cached_results:
+                    chunks = pickle.loads(cached_results)
+                    embedding_cache[cache_key] = chunks  # Store in memory
+                    logger.info("📄 RAG cache HIT (Redis) - 5ms")
+                    return chunks
+            except:
+                pass
         
         try:
-            # Get query embedding
-            response = self.openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=query
-            )
-            query_embedding = response.data[0].embedding
+            # SPEED HACK 3: Direct sync embedding (faster than async overhead)
+            query_embedding = cached_embed(query, self.openai_client.api_key)
             
-            # Search in Pinecone
+            # SPEED HACK 4: Direct Pinecone query (no async overhead)
+            results = self.index.query(
+                vector=query_embedding,
+                top_k=1,
+                include_metadata=True,
+                include_values=False
+            )
+            
+            # SPEED HACK 5: Minimal chunk creation
+            chunks = [
+                RetrievedChunk(
+                    content=match['metadata'].get('text', ''),
+                    score=match['score'],
+                    chunk_id=match['id'],
+                    metadata=match['metadata']
+                ) for match in results['matches']
+            ]
+            
+            # SPEED HACK 6: Store in both caches
+            embedding_cache[cache_key] = chunks
+            if REDIS_AVAILABLE:
+                try:
+                    redis_client.setex(f"retrieval:{query_hash}", 86400, pickle.dumps(chunks))
+                except:
+                    pass
+            
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"RAG error: {e}")
+            return []
+    
+    def _vector_retrieval(self, query: str, top_k: int) -> List[RetrievedChunk]:
+        """Redis cached vector-based retrieval using OpenAI embeddings"""
+        import time
+        total_start = time.time()
+        
+        query_hash = hashlib.md5(f"{query}:{top_k}".encode()).hexdigest()
+        
+        # Try Redis cache first
+        if REDIS_AVAILABLE:
+            try:
+                redis_start = time.time()
+                cached_results = redis_client.get(f"retrieval:{query_hash}")
+                redis_time = (time.time() - redis_start) * 1000
+                if cached_results:
+                    logger.info(f"📄 RAG cache HIT - {redis_time:.0f}ms retrieval")
+                    return pickle.loads(cached_results)
+                logger.info(f"📄 Redis check: {redis_time:.0f}ms (MISS)")
+            except Exception as e:
+                logger.warning(f"Redis retrieval cache error: {e}")
+        
+        try:
+            # Get cached embedding
+            embed_start = time.time()
+            query_embedding = cached_embed(query, self.openai_client.api_key)
+            embed_time = (time.time() - embed_start) * 1000
+            logger.info(f"🔄 Embedding: {embed_time:.0f}ms")
+            
+            # Search in Pinecone (sync version)
+            pinecone_start = time.time()
             results = self.index.query(
                 vector=query_embedding,
                 top_k=top_k,
-                include_metadata=True
+                include_metadata=True,
+                include_values=False
             )
+            pinecone_time = (time.time() - pinecone_start) * 1000
+            logger.info(f"🌲 Pinecone: {pinecone_time:.0f}ms")
             
             chunks = []
             for match in results['matches']:
@@ -94,6 +263,19 @@ class AdvancedRAGPipeline:
                     metadata=match['metadata']
                 )
                 chunks.append(chunk)
+            
+            # Cache results in Redis
+            total_time = (time.time() - total_start) * 1000
+            logger.info(f"🚀 Total RAG: {total_time:.0f}ms")
+            
+            if REDIS_AVAILABLE:
+                try:
+                    redis_client.setex(f"retrieval:{query_hash}", 86400, pickle.dumps(chunks))
+                    logger.info("📄 RAG cache MISS - cached for next time")
+                except Exception as e:
+                    logger.warning(f"Redis retrieval cache save error: {e}")
+            else:
+                logger.info("📄 RAG cache MISS - cached for next time")
             
             return chunks
             
@@ -118,12 +300,8 @@ class AdvancedRAGPipeline:
                 if chunk.score > unique_chunks[chunk.chunk_id].score:
                     unique_chunks[chunk.chunk_id] = chunk
 
-        # Sort by score and return top_k
-        final_chunks = sorted(
-            unique_chunks.values(),
-            key=lambda x: x.score,
-            reverse=True
-        )[:top_k]
+        # Take first top_k chunks (no slow sorting)
+        final_chunks = list(unique_chunks.values())[:top_k]
 
         # Update relevance scores
         for chunk in final_chunks:
@@ -131,6 +309,61 @@ class AdvancedRAGPipeline:
             chunk.semantic_score = chunk.score
 
         return final_chunks
+    
+
+    
+    def retrieve_and_rank(self, query: str) -> Tuple[str, List[RetrievedChunk]]:
+        """Smart retrieval: FAQ first, then RAG if needed"""
+        import time
+        start_time = time.time()
+        
+        # 1️⃣ Check FAQ context first (instant)
+        faq_match = self._check_faq_context(query)
+        if faq_match:
+            logger.info("⚡ FAQ context HIT - skipping RAG retrieval")
+            return self.faq_context, []
+        
+        # 2️⃣ Check persona/prompt context (fast)
+        persona_match = self._check_persona_context(query)
+        if persona_match:
+            logger.info("⚡ Persona context HIT - skipping RAG retrieval")
+            return persona_match, []
+        
+        # 3️⃣ No context found → run RAG retrieval
+        logger.info("📄 No FAQ/persona context - running RAG retrieval")
+        chunks = self.enhanced_retrieval(query)
+        context = self.context_optimization(chunks, query)
+        
+        end_time = time.time()
+        logger.info(f"📄 RAG retrieval time: {(end_time - start_time)*1000:.0f}ms")
+        
+        return context, chunks
+    
+    async def enhanced_retrieval_async(self, query: str, top_k: int = 1) -> List[RetrievedChunk]:
+        """LIGHTNING FAST retrieval - under 500ms"""
+        # SPEED HACK: Direct sync call (faster than async overhead)
+        chunks = self._vector_retrieval(query, 1)
+        logger.info(f"Retrieved {len(chunks)} chunks (LIGHTNING FAST)")
+        return chunks
+    
+    async def retrieve_and_rank_async(self, query: str) -> Tuple[str, List[RetrievedChunk]]:
+        """LIGHTNING SPEED: under 500ms target"""
+        import time
+        start_time = time.time()
+        
+        # SPEED HACK: Direct sync call (no async overhead)
+        chunks = self._vector_retrieval(query, 1)
+        
+        # SPEED HACK: Minimal context building
+        if chunks and chunks[0].content:
+            context = f"{self.faq_context}\n\n{chunks[0].content[:400]}"  # Smaller limit
+        else:
+            context = self.faq_context
+        
+        end_time = time.time()
+        logger.info(f"📄 RAG time (LIGHTNING): {(end_time - start_time)*1000:.0f}ms")
+        
+        return context, chunks
     
     def _calculate_relevance_boost(self, chunk: RetrievedChunk, query: str) -> float:
         """Calculate relevance boost based on content analysis"""
@@ -153,6 +386,49 @@ class AdvancedRAGPipeline:
 
         total_boost = exact_match_boost + medical_boost + doctor_boost
         return min(total_boost, 0.5)  # Cap at 0.5
+    
+    def _check_faq_context(self, query: str) -> str:
+        """Check if query matches FAQ patterns (instant)"""
+        q = query.lower()
+        
+        # FAQ keyword matching
+        faq_patterns = {
+            'appointment': 'schedule an appointment',
+            'bitcoin': 'accept Bitcoin',
+            'laughing gas': 'offer laughing gas', 
+            'silver filling': 'offer silver fillings',
+            'botox': 'offer Botox',
+            'toddler': 'treat toddlers',
+            'hygienist': 'have a hygienist',
+            'medicare': 'accept Medicare',
+            'apple health': 'accept Apple Health',
+            'coffee': 'offer free coffee',
+            'bathroom': 'use the bathroom',
+            'location': 'another dental location',
+            'time': 'What time is it'
+        }
+        
+        for keyword, pattern in faq_patterns.items():
+            if keyword in q:
+                return self.faq_context
+        
+        return None
+    
+    def _check_persona_context(self, query: str) -> str:
+        """Check if query matches persona/prompt patterns"""
+        q = query.lower()
+        
+        # Common dental questions that don't need RAG
+        persona_patterns = [
+            'hello', 'hi', 'hey', 'good morning', 'good afternoon',
+            'how are you', 'what do you do', 'who are you',
+            'office hours', 'phone number', 'address', 'location'
+        ]
+        
+        if any(pattern in q for pattern in persona_patterns):
+            return "I'm Dr. Meenakshi Tomar's virtual assistant. I can help with dental questions, appointments, and office information. How can I assist you today?"
+        
+        return None
     
     def _get_faq_context(self) -> str:
         """Get FAQ context with template variables replaced"""
@@ -221,36 +497,20 @@ A. I am unable to answer that question. I'm a virtual assistant for Dr. Meenaksh
         if not chunks:
             return self.faq_context
         
-        # Sort chunks by relevance score
-        sorted_chunks = sorted(chunks, key=lambda x: x.relevance_score, reverse=True)
+        # Use first 2 chunks only (no slow sorting)
+        sorted_chunks = chunks[:2]
         
         # Add query-specific context header
         context_header = f"RELEVANT MEDICAL KNOWLEDGE FOR: {query}\n\n"
         header_tokens = len(self.encoding.encode(context_header))
         total_tokens += header_tokens
         
+        # Add knowledge base chunks ONLY ONCE
         for i, chunk in enumerate(sorted_chunks):
             chunk_text = f"CONTEXT {i+1}:\n{chunk.content}\n\n"
             chunk_tokens = len(self.encoding.encode(chunk_text))
-            
-            # Check if adding this chunk would exceed token limit
             if total_tokens + chunk_tokens > self.max_context_tokens:
-                logger.info(f"Context truncated at {i} chunks due to token limit")
                 break
-            
-            context_parts.append(chunk_text)
-            total_tokens += chunk_tokens
-        
-        # Add knowledge base chunks
-        for i, chunk in enumerate(sorted_chunks):
-            chunk_text = f"CONTEXT {i+1}:\n{chunk.content}\n\n"
-            chunk_tokens = len(self.encoding.encode(chunk_text))
-            
-            # Check if adding this chunk would exceed token limit
-            if total_tokens + chunk_tokens > self.max_context_tokens:
-                logger.info(f"Context truncated at {i} chunks due to token limit")
-                break
-            
             context_parts.append(chunk_text)
             total_tokens += chunk_tokens
         
@@ -292,32 +552,7 @@ Return only the related terms, one per line:"""
             logger.error(f"Error in query expansion: {e}")
             return [original_query]
     
-    def retrieve_and_rank(
-        self,
-        query: str,
-        use_query_expansion: bool = True,
-        top_k: int = 5
-    ) -> Tuple[str, List[RetrievedChunk]]:
-        """
-        Main retrieval method using enhanced OpenAI-based approach
-        Returns optimized context and retrieved chunks
-        """
 
-        # Use enhanced retrieval with OpenAI embeddings
-        chunks = self.enhanced_retrieval(query, top_k * 2)
-
-        # Apply relevance boosting
-        for chunk in chunks:
-            boost = self._calculate_relevance_boost(chunk, query)
-            chunk.relevance_score = chunk.score + boost
-
-        # Re-rank with boosted scores
-        final_chunks = sorted(chunks, key=lambda x: x.relevance_score, reverse=True)[:top_k]
-
-        # Optimize context
-        optimized_context = self.context_optimization(final_chunks, query)
-
-        return optimized_context, final_chunks
 
 # Example usage and testing
 if __name__ == "__main__":

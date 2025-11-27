@@ -140,8 +140,8 @@ async def chat_endpoint(request: ChatRequest):
         # Get conversation context
         conversation_context = conversation.get_conversation_summary()
         
-        # Process with multi-agent system
-        agent_response: AgentResponse = orchestrator.process_consultation(request.message, conversation_context)
+        # Process with multi-agent system (TRUE ASYNC)
+        agent_response: AgentResponse = await orchestrator.process_consultation(request.message, conversation_context)
         
         # Add assistant response to memory
         conversation.add_message(
